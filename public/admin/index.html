@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mary's kiosk admin</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+:root {
+	--bg: #f6f2ea; --card: #fff; --ink: #1e2b33; --soft: #55606a; --line: #e2dccf;
+	--teal: #1d6b66; --warn: #9a3412; --warn-bg: #fdecdc; --ok-bg: #e4f1ee;
+}
+@media (prefers-color-scheme: dark) {
+	:root { --bg: #11181d; --card: #1a242b; --ink: #e8edf0; --soft: #9aa6af; --line: #2c3a43; --teal: #4fb3a9; --warn: #f4a36b; --warn-bg: #3a2416; --ok-bg: #17322e; }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; font: 16px/1.45 "Atkinson Hyperlegible", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("/fonts/atkinson-400.woff2") format("woff2"); font-weight: 400; }
+@font-face { font-family: "Atkinson Hyperlegible"; src: url("/fonts/atkinson-700.woff2") format("woff2"); font-weight: 700; }
+header { padding: 20px 16px 4px; max-width: 980px; margin: 0 auto; }
+header h1 { margin: 0; font-size: 26px; }
+header p { margin: 4px 0 0; color: var(--soft); }
+main { max-width: 980px; margin: 0 auto; padding: 8px 16px 48px; display: grid; gap: 16px; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+section h2 { margin: 0 0 12px; font-size: 19px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.stat .k { color: var(--soft); font-size: 14px; }
+.stat .v { font-weight: 700; }
+.bad { background: var(--warn-bg); color: var(--warn); }
+.good { background: var(--ok-bg); }
+button, .btn { font: inherit; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
+button.primary, .btn.primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+button:disabled { opacity: .5; cursor: default; }
+input, select { font: inherit; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-width: 0; }
+input[type=checkbox] { width: 20px; height: 20px; }
+input[type=number] { width: 80px; }
+label { display: inline-flex; gap: 6px; align-items: center; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+th { color: var(--soft); font-weight: 400; font-size: 14px; }
+.muted { color: var(--soft); }
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.photo { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; }
+.photo img { width: 100%; aspect-ratio: 3/2; object-fit: cover; background: var(--line); }
+.photo .f { padding: 8px; display: grid; gap: 6px; }
+.photo.off img { opacity: .4; }
+.pillbox { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; background: var(--line); vertical-align: middle; }
+#toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+#toast.on { opacity: 1; }
+.event-text { width: 100%; min-width: 220px; }
+code { font-size: 13px; word-break: break-all; }
+</style>
+</head>
+<body>
+<header>
+	<h1>Mary's kiosk</h1>
+	<p id="subtitle">Loading…</p>
+</header>
+<main>
+	<section id="status"><h2>Status</h2><div class="grid" id="status-grid"></div>
+		<div class="row" style="margin-top:12px">
+			<button id="test-alert">Send a test alert to my phone</button>
+			<button id="sync-now">Sync calendar now</button>
+			<a class="btn" id="google-connect" href="/oauth/google/start">Connect Google Calendar</a>
+			<button id="google-disconnect" hidden>Disconnect Google</button>
+		</div>
+	</section>
+
+	<section><h2>Doses</h2>
+		<p class="muted">Mary's tap means she says she took them, not proof. Mark a dose done after checking the pillbox, or skipped if it shouldn't count.</p>
+		<div class="table-wrap"><table id="doses"><thead><tr><th>Day</th><th>Dose</th><th>Due</th><th>Status</th><th></th></tr></thead><tbody></tbody></table></div>
+	</section>
+
+	<section><h2>Dry run</h2>
+		<p class="muted">A test dose runs the whole loop on short timings: the reminder and chime on the kiosk, the second chime, then the alert to your phone. It's labelled as a test on screen and in the alert, and doesn't touch the real schedule.</p>
+		<div class="row">
+			<label>Starts in <input type="number" id="t-in" value="1" min="0"> min</label>
+			<label>Remind again after <input type="number" id="t-again" value="2" min="1"> min</label>
+			<label>Alert after <input type="number" id="t-alert" value="4" min="1"> min</label>
+			<label>Stays up <input type="number" id="t-expire" value="10" min="1"> min</label>
+		</div>
+		<div class="row" style="margin-top:10px">
+			<button class="primary" id="test-dose">Start a test dose</button>
+			<button id="test-cancel">Cancel test doses</button>
+		</div>
+	</section>
+
+	<section><h2>Medication schedule</h2>
+		<p class="muted">Times are in <span id="tz"></span>. A dose only runs when it's turned on. Changes apply from the next dose that hasn't come due.</p>
+		<div class="table-wrap"><table id="schedule"><thead><tr><th>Dose</th><th>On</th><th>Time</th><th>Remind again</th><th>Alert me after</th><th>Reminder stays up</th><th>Pillbox photo</th><th></th></tr></thead><tbody></tbody></table></div>
+	</section>
+
+	<section><h2>Events</h2>
+		<p class="muted">Synced from your Google Calendar: events whose title starts with "(Mary)". Display text replaces the title on the kiosk.</p>
+		<div class="table-wrap"><table id="events"><thead><tr><th>When</th><th>Calendar title</th><th>What Mary sees</th><th>Hide</th></tr></thead><tbody></tbody></table></div>
+	</section>
+
+	<section><h2>Photos</h2>
+		<form id="upload" class="row">
+			<input type="file" name="file" accept="image/*" multiple required>
+			<input name="caption" placeholder="Caption, e.g. Molly, your niece" maxlength="120">
+			<input name="people" placeholder="People (comma separated), e.g. Molly" maxlength="200">
+			<button class="primary">Upload</button>
+		</form>
+		<p class="muted">People are matched against today's events, so Molly's photos come up more on the days she visits.</p>
+		<div class="photos" id="photos"></div>
+	</section>
+
+	<section><h2>Settings</h2>
+		<div class="row">
+			<label>Coming up shows <select id="s-look"><option value="3">3 days</option><option value="7">7 days</option></select></label>
+			<label>Show Today each morning at <input type="time" id="s-morning"></label>
+			<label>Show Today <input type="number" id="s-pre" min="0" max="240"> min before an event</label>
+			<button id="save-settings">Save</button>
+		</div>
+	</section>
+
+	<section><h2>Kiosk setup</h2>
+		<p class="muted">Open this link once on the Chromebook. It stores the device key in the kiosk and then forgets it from the address bar. Treat it like a password.</p>
+		<div class="row"><button id="show-link">Show setup link</button></div>
+		<p><code id="kiosk-link"></code></p>
+	</section>
+
+	<section><h2>Recent alerts</h2>
+		<div class="table-wrap"><table id="alerts"><thead><tr><th>When</th><th>Kind</th><th>Message</th><th>Delivered</th></tr></thead><tbody></tbody></table></div>
+	</section>
+</main>
+<div id="toast" role="status"></div>
+<script type="module" src="/admin/admin.js"></script>
+</body>
+</html>

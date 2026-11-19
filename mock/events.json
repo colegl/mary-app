@@ -1,0 +1,11 @@
+{
+	"_comment": "Mock calendar for phase 2 and local dev (CALENDAR_SOURCE=mock). day is days from today; times are local HH:MM. Titles keep the (Mary) prefix like the real calendar.",
+	"events": [
+		{ "day": 0, "start": "11:30", "end": "15:00", "title": "(Mary) Food pantry", "display_text": "Food pantry — your job" },
+		{ "day": 0, "start": "16:00", "title": "(Mary) Molly visits", "display_text": "Molly is coming to see you" },
+		{ "day": 1, "start": "11:30", "title": "(Mary) Hair appointment" },
+		{ "day": 2, "all_day": true, "title": "(Mary) Garden club newsletter comes" },
+		{ "day": 3, "start": "10:00", "end": "11:00", "title": "(Mary) Dr. M", "display_text": "Check-up with Dr. M. Gary will drive." },
+		{ "day": 7, "start": "11:30", "end": "15:00", "title": "(Mary) Food pantry", "display_text": "Food pantry — your job" }
+	]
+}
