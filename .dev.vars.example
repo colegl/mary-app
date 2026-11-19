@@ -1,0 +1,9 @@
+# Copy to .dev.vars for `npm run dev`. Never commit .dev.vars.
+PUBLIC_URL=http://127.0.0.1:8790
+KIOSK_TOKEN=dev-kiosk-token-change-me
+TOKEN_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+CALENDAR_SOURCE=mock
+# Skips the Cloudflare Access check on /admin. Local dev only; never set this in production.
+ADMIN_DEV_BYPASS=1
+# Alerts in dev: leave NTFY_TOPIC empty to only log them in the admin page.
+NTFY_TOPIC=

@@ -1,0 +1,54 @@
+/**
+ * Mary's helper kiosk: one Worker serves the kiosk app, its API, the admin page,
+ * the calendar sync and the dose watcher.
+ *
+ * Secrets (never in this file; see README "Deploy"):
+ *   npx wrangler secret put KIOSK_TOKEN            # long random string the kiosk is set up with
+ *   npx wrangler secret put TOKEN_ENCRYPTION_KEY   # base64 of 32 random bytes (encrypts the Google refresh token)
+ *   npx wrangler secret put GOOGLE_CLIENT_ID
+ *   npx wrangler secret put GOOGLE_CLIENT_SECRET
+ *   npx wrangler secret put NTFY_TOPIC             # if ALERT_PROVIDER is "ntfy"
+ *   npx wrangler secret put PUSHOVER_TOKEN / PUSHOVER_USER   # if "pushover"
+ *
+ * For local dev, copy .dev.vars.example to .dev.vars.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mary-kiosk",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    // The Worker checks the device token or Cloudflare Access before these are served.
+    "run_worker_first": ["/api/*", "/admin", "/admin/*", "/oauth/*"]
+  },
+  "vars": {
+    // Public origin of this Worker (used for the Google OAuth redirect).
+    "PUBLIC_URL": "https://mary-kiosk.garycole0415.workers.dev",
+    // Mary's time zone. Every dose time and "Tuesday morning" is computed in it.
+    "TIMEZONE": "America/New_York",
+    // "google" for the real calendar, "mock" to use mock/events.json (phase 2 testing).
+    "CALENDAR_SOURCE": "google",
+    "CALENDAR_ID": "primary",
+    // "ntfy" or "pushover".
+    "ALERT_PROVIDER": "ntfy",
+    "NTFY_SERVER": "https://ntfy.sh",
+    // Cloudflare Access application protecting /admin, /api/admin/* and /oauth/*.
+    "ACCESS_TEAM_DOMAIN": "https://YOUR-TEAM.cloudflareaccess.com",
+    "ACCESS_AUD": "YOUR-ACCESS-APPLICATION-AUD-TAG"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mary-kiosk", "database_id": "REPLACE-WITH-ID-FROM-wrangler-d1-create", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "PHOTOS", "bucket_name": "mary-kiosk-photos" }
+  ],
+  "triggers": {
+    // Every minute: dose watcher and kiosk-offline check. Calendar sync runs every 15th minute.
+    "crons": ["* * * * *"]
+  },
+  "observability": { "enabled": true },
+  "dev": { "ip": "127.0.0.1", "port": 8790 }
+}
