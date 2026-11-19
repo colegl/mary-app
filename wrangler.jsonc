@@ -28,7 +28,7 @@
     // Public origin of this Worker (used for the Google OAuth redirect).
     "PUBLIC_URL": "https://mary-kiosk.garycole0415.workers.dev",
     // Mary's time zone. Every dose time and "Tuesday morning" is computed in it.
-    "TIMEZONE": "America/Los_Angeles",
+    "TIMEZONE": "America/New_York",
     // "google" for the real calendar, "mock" to use mock/events.json (phase 2 testing).
     "CALENDAR_SOURCE": "google",
     "CALENDAR_ID": "primary",

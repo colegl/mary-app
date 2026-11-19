@@ -38,6 +38,9 @@ test("zoned times round-trip, including DST days", () => {
 	}
 	assert.equal(new Date(zonedToUtc("2026-12-01", "12:00", tz)).toISOString(), "2026-12-01T20:00:00.000Z");
 	assert.equal(new Date(zonedToUtc("2026-07-01", "12:00", tz)).toISOString(), "2026-07-01T19:00:00.000Z");
+	// Eastern, Mary's time zone.
+	assert.equal(new Date(zonedToUtc("2026-12-01", "08:00", "America/New_York")).toISOString(), "2026-12-01T13:00:00.000Z");
+	assert.equal(new Date(zonedToUtc("2026-07-01", "08:00", "America/New_York")).toISOString(), "2026-07-01T12:00:00.000Z");
 });
 
 test("strip wording", () => {

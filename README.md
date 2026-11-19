@@ -73,7 +73,7 @@ npx wrangler r2 bucket create mary-kiosk-photos
 ### 3. Set the variables in `wrangler.jsonc`
 
 - `PUBLIC_URL`: the Worker's address, e.g. `https://mary-kiosk.<your-subdomain>.workers.dev` (check the subdomain in the Cloudflare dashboard under Workers).
-- `TIMEZONE`: Mary's time zone, e.g. `America/Los_Angeles` or `America/New_York`. Every dose time and "Tuesday morning" uses it.
+- `TIMEZONE`: Mary's time zone. It is set to Eastern (`America/New_York`). Every dose time and "Tuesday morning" uses it.
 - `CALENDAR_SOURCE`: start with `"mock"` if you want to try phase 2 before connecting Google; switch to `"google"` after.
 - `ALERT_PROVIDER`: `"ntfy"` (recommended, free) or `"pushover"`.
 - `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`: filled in at step 6.
