@@ -34,6 +34,7 @@ Gary's browser (/admin) ──Cloudflare Access─▶│  ├──▶ Google Ca
 | `mock/events.json` | Phase 2 mock calendar (`CALENDAR_SOURCE=mock`) |
 | `migrations/` | D1 schema |
 | `docs/dry-run.md` | The medication dry-run plan |
+| `.github/workflows/deploy.yml` | Tests, sets up Cloudflare and deploys on every merge to `main` |
 
 ### Behaviour worth knowing
 
@@ -48,106 +49,127 @@ Gary's browser (/admin) ──Cloudflare Access─▶│  ├──▶ Google Ca
 
 ## Deploy
 
-You need Node 20+ and a Cloudflare account (the free plan is enough). Run everything from this folder.
+Everything happens in the Cloudflare and GitHub websites. You don't need wrangler, Node or a terminal. A GitHub Action (`.github/workflows/deploy.yml`) does the work:
 
-### 1. Install and sign in
+- It runs the tests.
+- It creates the D1 database and R2 photo bucket if they're missing, and applies database migrations.
+- It generates the kiosk key once, copies your other secrets to the Worker, and deploys.
+- It runs on every merge to `main`, and whenever you press **Run workflow**. After you change a secret or variable, press **Run workflow** so the change takes effect.
 
-```sh
-npm install
-npx wrangler login
-```
+### 1. Prepare Cloudflare (once)
 
-### 2. Create the database and photo bucket
+1. Sign in at [dash.cloudflare.com](https://dash.cloudflare.com). The free plan is enough.
+2. Open **Workers & Pages** once. If it asks you to choose a `workers.dev` subdomain, pick one. The kiosk will live at `https://mary-kiosk.<subdomain>.workers.dev`.
+3. Open **R2 Object Storage** and enable it. Cloudflare asks for a payment method even on the free tier (10 GB free, far more than the photos need).
+4. Copy your **Account ID**. It's on the account home page, and on the right side of Workers & Pages.
 
-```sh
-npx wrangler d1 create mary-kiosk
-```
+### 2. Create a Cloudflare API token
 
-Copy the `database_id` it prints into `wrangler.jsonc` (replace `REPLACE-WITH-ID-FROM-wrangler-d1-create`). Then:
+Click your profile icon (top right), then **My Profile → API Tokens → Create Token**:
 
-```sh
-npm run db:migrate
-npx wrangler r2 bucket create mary-kiosk-photos
-```
+1. Use the **Edit Cloudflare Workers** template.
+2. Under **Permissions**, click **+ Add more** and add **Account → D1 → Edit**. The template already includes Workers Scripts and Workers R2 Storage.
+3. Under **Account Resources**, choose your account. Under **Zone Resources**, leave **All zones**.
+4. Click **Continue to summary**, then **Create Token**, and copy the token. Cloudflare only shows it once.
 
-### 3. Set the variables in `wrangler.jsonc`
+### 3. Add the token to GitHub and deploy
 
-- `PUBLIC_URL`: the Worker's address, e.g. `https://mary-kiosk.<your-subdomain>.workers.dev` (check the subdomain in the Cloudflare dashboard under Workers).
-- `TIMEZONE`: Mary's time zone. It is set to Eastern (`America/New_York`). Every dose time and "Tuesday morning" uses it.
-- `CALENDAR_SOURCE`: start with `"mock"` if you want to try phase 2 before connecting Google; switch to `"google"` after.
-- `ALERT_PROVIDER`: `"ntfy"` (recommended, free) or `"pushover"`.
-- `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD`: filled in at step 6.
+In the repository on GitHub, go to **Settings → Secrets and variables → Actions → New repository secret** and add:
 
-### 4. Set the secrets
+| Secret | Value |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | the token from step 2 |
+| `CLOUDFLARE_ACCOUNT_ID` | the Account ID from step 1 |
 
-```sh
-# A long random key the kiosk uses. Any 40+ random characters:
-openssl rand -base64 36 | npx wrangler secret put KIOSK_TOKEN
-# Encrypts the Google refresh token stored in D1:
-openssl rand -base64 32 | npx wrangler secret put TOKEN_ENCRYPTION_KEY
-```
+Then go to **Actions → Deploy → Run workflow**. When it finishes, its summary shows the kiosk address, the admin address and the Google redirect URI. The kiosk itself already works now. The admin page answers "Forbidden" until step 4, and that's intended.
+
+### 4. Lock the admin page with Cloudflare Access
+
+In the Cloudflare dashboard, open **Zero Trust**. It's free for up to 50 users, and it may ask you to pick a team name and the free plan. Then go to **Access → Applications → Add an application → Self-hosted**:
+
+- **Application domain:** your `mary-kiosk.<subdomain>.workers.dev` host, added **three** times with the paths `admin`, `api/admin` and `oauth`.
+- **Identity provider:** One-time PIN to your email is the quickest. Google also works.
+- **Policy:** Allow, with Include → Emails → your email address only.
+
+After saving, open the application and copy its **Application Audience (AUD) Tag**. In GitHub, go to **Settings → Secrets and variables → Actions → Variables tab → New repository variable** and add:
+
+| Variable | Value |
+|---|---|
+| `ACCESS_TEAM_DOMAIN` | `https://<your team name>.cloudflareaccess.com` |
+| `ACCESS_AUD` | the AUD tag |
+
+Then **Run workflow** again. Now `/admin/` asks you to sign in, and then opens. The Worker checks the Access token itself as well, so the admin routes stay closed even if the Access app is misconfigured.
 
 ### 5. Phone alerts (Pixel)
 
-**ntfy** (recommended): install the ntfy app from the Play Store. Pick a long, unguessable topic name (anyone who knows it can read the alerts), e.g. `openssl rand -hex 16` prefixed with `mary-`. In the app, subscribe to that topic, and in the topic's settings turn on "Instant delivery" and allow high-priority notifications to make sound. Then:
+**ntfy** (recommended, free):
 
-```sh
-npx wrangler secret put NTFY_TOPIC
-```
+1. Install the ntfy app from the Play Store.
+2. Make up a long, unguessable topic name, for example `mary-` followed by 20 random letters. Anyone who knows the name can read the alerts.
+3. In the app, subscribe to that topic. In the topic's settings, turn on **Instant delivery** and let high-priority notifications make sound.
+4. Add the topic name as a GitHub secret named `NTFY_TOPIC`, then **Run workflow**.
+5. In the admin page, press **Send a test alert to my phone**.
 
-**Pushover** instead: create an application at pushover.net, set `"ALERT_PROVIDER": "pushover"`, then `npx wrangler secret put PUSHOVER_TOKEN` (the app token) and `PUSHOVER_USER` (your user key).
+**Pushover** instead: create an application at pushover.net and add these to GitHub:
 
-### 6. Deploy, then lock the admin page with Cloudflare Access
+- the secrets `PUSHOVER_TOKEN` (the app token) and `PUSHOVER_USER` (your user key)
+- the variable `ALERT_PROVIDER` set to `pushover`
 
-```sh
-npm run deploy
-```
+Then **Run workflow**.
 
-In the Cloudflare dashboard, open **Zero Trust** (free for up to 50 users) and pick a team name. Then **Access → Applications → Add an application → Self-hosted**:
+### 6. Connect Google Calendar (read-only)
 
-- Application domain: your `workers.dev` host, with **three** paths: `admin`, `api/admin`, `oauth`.
-- Identity provider: Google (or one-time PIN to your email).
-- Policy: Allow, Emails: your Google address only.
+In [Google Cloud Console](https://console.cloud.google.com):
 
-Copy the application's **Audience (AUD) tag** into `ACCESS_AUD`, and set `ACCESS_TEAM_DOMAIN` to `https://<team>.cloudflareaccess.com`. Deploy again. The Worker checks the Access token itself as well, so the admin routes stay closed even if the Access app is misconfigured.
+1. Create a project. Then go to **APIs & Services → Library → Google Calendar API → Enable**.
+2. Set up the **OAuth consent screen** (Google Auth Platform):
+   - Choose External, add yourself as a test user, and add the scope `.../auth/calendar.readonly`.
+   - Then **Publish app** so it's "In production". In "Testing" mode Google expires the sign-in after 7 days and the sync would stop.
+   - Unverified is fine for your own account. You'll click through a warning once.
+3. Go to **Clients (Credentials) → Create client → Web application**. Set **Authorized redirect URI** to the one from the workflow summary: `https://mary-kiosk.<subdomain>.workers.dev/oauth/google/callback`.
 
-### 7. Connect Google Calendar (read-only)
+Add the client's ID and secret to GitHub as the secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then **Run workflow**. In the admin page, click **Connect Google Calendar** and approve. Events whose title starts with `(Mary)` appear under **Events** within a minute.
 
-In Google Cloud Console:
+If you'd like to try the screens before connecting Google, set the variable `CALENDAR_SOURCE` to `mock` and run the workflow. That uses `mock/events.json`. Delete the variable afterwards and run it again.
 
-1. Create a project, then **APIs & Services → Library → Google Calendar API → Enable**.
-2. **OAuth consent screen**: External, add yourself as a test user, add the scope `.../auth/calendar.readonly`. Then **Publish app** (to "In production"). In "Testing" mode Google expires the refresh token after 7 days and sync would stop. Unverified is fine for your own account; you'll click through a warning once.
-3. **Credentials → Create credentials → OAuth client ID → Web application**. Authorized redirect URI: `https://<your worker>/oauth/google/callback`.
+### Optional settings (repository variables)
 
-```sh
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-```
+| Variable | Default | What it does |
+|---|---|---|
+| `TIMEZONE` | `America/New_York` (in `wrangler.jsonc`) | Mary's time zone. Every dose time and "Tuesday morning" uses it. |
+| `CALENDAR_ID` | `primary` | Use another calendar. Find its ID in Google Calendar → Settings → that calendar → Integrate calendar. |
+| `CALENDAR_SOURCE` | `google` | `mock` for the sample events |
+| `ALERT_PROVIDER` | `ntfy` | `pushover` to use Pushover |
+| `PUBLIC_URL` | worked out from your subdomain | Set this only if you add a custom domain |
 
-Set `CALENDAR_SOURCE` to `"google"` and deploy. Open `https://<your worker>/admin/`, click **Connect Google Calendar**, and approve. Events whose title starts with `(Mary)` appear under **Events** within a minute. If they live on a calendar other than your main one, set `CALENDAR_ID` to that calendar's ID (Google Calendar → Settings → the calendar → Integrate calendar).
+The kiosk key and the key that encrypts the Google sign-in are generated on the first deploy and kept on the Worker. You never need to see them: the admin page's **Kiosk setup** gives you the link for the Chromebook.
 
-### 8. Fill in the admin page
+### 7. Fill in the admin page
 
 - **Photos**: upload, caption ("Molly, your niece"), and People for event-linked photos.
 - **Medication schedule**: set the three times, upload a photo of each pillbox compartment, tick **On**, Save. Nothing reminds until a dose is on.
 - **Settings**: Coming up 3 or 7 days, morning Today time, minutes before events.
 - **Events**: add display text where the calendar title isn't what Mary should read.
 
-### 9. Set up the Chromebook
+### 8. Set up the Chromebook
 
-1. Check its Auto Update Expiration date: Settings → About ChromeOS → Additional details.
+The kiosk only needs Chrome. Linux on the Chromebook isn't used.
+
+1. Check its Auto Update Expiration date: Settings → About ChromeOS → Additional details. Past that date Chrome keeps working but gets no security updates, so plan on replacing the device eventually.
 2. Plug it in. Settings → Device → Power: **When idle: Keep display on** (for both charging and battery), and turn off "Sleep when cover is closed".
 3. Sign in with the dedicated Google account (spec option A).
 4. In the admin page, **Kiosk setup → Show setup link**, and open that link once in Chrome on the Chromebook. It stores the key and removes it from the address bar.
-5. Chrome menu → **Cast, save and share → Install page as app**. Open the installed app, then make it full screen (the full-screen key, or right-click its shelf icon → New window → Full screen). Add the app to Settings → Apps → **Startup**, or pin it, so it comes back after a restart.
+5. Chrome menu → **Cast, save and share → Install page as app**. Open the installed app, then make it full screen (the full-screen key, or right-click its shelf icon → New window → Full screen). Pin it to the shelf. If the app's settings (Settings → Apps → Manage your apps) offer **Open at login**, turn that on so it comes back after a restart.
 6. Tap the screen once after each start: that unlocks the chime, which ChromeOS blocks until a first touch. (With option B, the managed kiosk license, autoplay can be allowed by policy.)
 7. Turn the volume to low-medium, flip into tent mode, and watch for the first heartbeat under Status.
 
-### 10. Do the dry run
+### 9. Do the dry run
 
 Before anyone relies on the medication loop, follow [docs/dry-run.md](docs/dry-run.md).
 
-## Local development
+## Local development (optional)
+
+Only needed if you change the code on a computer that runs Node 20+.
 
 ```sh
 cp .dev.vars.example .dev.vars
