@@ -2,14 +2,12 @@
  * Mary's helper kiosk: one Worker serves the kiosk app, its API, the admin page,
  * the calendar sync and the dose watcher.
  *
- * Secrets (never in this file; see README "Deploy"):
- *   npx wrangler secret put KIOSK_TOKEN            # long random string the kiosk is set up with
- *   npx wrangler secret put TOKEN_ENCRYPTION_KEY   # base64 of 32 random bytes (encrypts the Google refresh token)
- *   npx wrangler secret put GOOGLE_CLIENT_ID
- *   npx wrangler secret put GOOGLE_CLIENT_SECRET
- *   npx wrangler secret put NTFY_TOPIC             # if ALERT_PROVIDER is "ntfy"
- *   npx wrangler secret put PUSHOVER_TOKEN / PUSHOVER_USER   # if "pushover"
+ * Deployed by .github/workflows/deploy.yml, which fills in the D1 id, PUBLIC_URL, the
+ * Access settings and the secrets at deploy time (see README "Deploy"). The values below are
+ * the defaults; GitHub repository variables override them.
  *
+ * Secrets (never in this file): KIOSK_TOKEN and TOKEN_ENCRYPTION_KEY are generated on the
+ * first deploy; GOOGLE_CLIENT_ID/SECRET, NTFY_TOPIC or PUSHOVER_TOKEN/USER come from GitHub.
  * For local dev, copy .dev.vars.example to .dev.vars.
  */
 {
@@ -25,7 +23,7 @@
     "run_worker_first": ["/api/*", "/admin", "/admin/*", "/oauth/*"]
   },
   "vars": {
-    // Public origin of this Worker (used for the Google OAuth redirect).
+    // Public origin of this Worker (used for the Google OAuth redirect). The deploy workflow sets it.
     "PUBLIC_URL": "https://mary-kiosk.garycole0415.workers.dev",
     // Mary's time zone. Every dose time and "Tuesday morning" is computed in it.
     "TIMEZONE": "America/New_York",
