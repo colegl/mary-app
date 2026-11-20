@@ -345,23 +345,41 @@ admin.post("/events/:id", async (c) => {
 	return c.json({ ok: true });
 });
 
+/** Stores one photo unless the same original was already added. Returns its id, or null for a duplicate. */
+async function savePhoto(env: Env, file: File, caption: string, people: string, hash: string | null): Promise<string | null> {
+	if (hash) {
+		const dup = await env.DB.prepare("SELECT id FROM photos WHERE source_hash = ?").bind(hash).first();
+		if (dup) return null;
+	}
+	const id = crypto.randomUUID();
+	const key = `photos/${id}`;
+	await env.PHOTOS.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || "image/jpeg" } });
+	await env.DB.prepare("INSERT INTO photos (id, r2_key, caption, people, active, created_at, source_hash) VALUES (?, ?, ?, ?, 1, ?, ?)")
+		.bind(id, key, caption, people, Date.now(), hash)
+		.run();
+	return id;
+}
+
+const HASH = /^[0-9a-f]{64}$/;
+
 admin.post("/photos", async (c) => {
 	const form = await c.req.formData();
-	const files = form.getAll("file").filter((f): f is File => f instanceof File);
+	const files = form.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
 	if (!files.length) return c.json({ error: "no file" }, 400);
+	if (files.some((f) => f.type && !f.type.startsWith("image/"))) return c.json({ error: "Only photos can be added." }, 400);
 	const caption = String(form.get("caption") ?? "").slice(0, 120);
 	const people = String(form.get("people") ?? "").slice(0, 200);
+	// One fingerprint per file, in the same order (sent by the admin page).
+	const hashes = form.getAll("hash").map(String);
 	const ids: string[] = [];
-	for (const file of files) {
-		const id = crypto.randomUUID();
-		const key = `photos/${id}`;
-		await c.env.PHOTOS.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || "image/jpeg" } });
-		await c.env.DB.prepare("INSERT INTO photos (id, r2_key, caption, people, active, created_at) VALUES (?, ?, ?, ?, 1, ?)")
-			.bind(id, key, caption, people, Date.now())
-			.run();
-		ids.push(id);
+	let duplicates = 0;
+	for (const [i, file] of files.entries()) {
+		const hash = HASH.test(hashes[i] ?? "") ? hashes[i] : null;
+		const id = await savePhoto(c.env, file, caption, people, hash);
+		if (id) ids.push(id);
+		else duplicates++;
 	}
-	return c.json({ ok: true, ids });
+	return c.json({ ok: true, ids, duplicates });
 });
 
 admin.post("/photos/:id", async (c) => {
@@ -492,6 +510,19 @@ app.get("/admin/logout", (c) => {
 	c.header("Set-Cookie", clearCookie());
 	return c.redirect("/admin/login");
 });
+// The phone's share menu ("Share → Mary's kiosk") posts photos here. Normally the admin
+// page's service worker catches the post and hands the photos to the page, which shrinks
+// them before uploading; this is the fallback for when it isn't running.
+app.post("/admin/share", async (c) => {
+	if (!(await isAdmin(c))) return c.redirect("/admin/login", 303);
+	const form = await c.req.formData().catch(() => null);
+	const files = (form?.getAll("file") ?? []).filter((f): f is File => f instanceof File && f.size > 0 && f.type.startsWith("image/"));
+	let added = 0;
+	for (const file of files) if (await savePhoto(c.env, file, "", "", null)) added++;
+	return c.redirect(`/admin/?added=${added}#photos`, 303);
+});
+// The install files must load without the sign-in cookie (browsers fetch manifests without it).
+for (const path of ["/admin/manifest.webmanifest", "/admin/sw.js"]) app.get(path, (c) => c.env.ASSETS.fetch(c.req.raw));
 app.all("/admin/*", adminAuth, (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));

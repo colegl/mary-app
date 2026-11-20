@@ -391,14 +391,133 @@ $("#show-link").addEventListener("click", async () => {
 	const r = await api("/kiosk-link");
 	$("#kiosk-link").textContent = r.url;
 });
-$("#upload").addEventListener("submit", async (ev) => {
-	ev.preventDefault();
-	const form = ev.target;
-	await api("/photos", { method: "POST", body: new FormData(form) });
+// ---------- Adding photos ----------
+
+const MAX_EDGE = 2400; // the Chromebook's screen is 2256 × 1504
+const status = (msg, cls = "") => {
+	const el = $("#upload-status");
+	el.hidden = !msg;
+	el.className = `stat ${cls}`;
+	el.textContent = msg;
+};
+
+async function sha256(blob) {
+	const buf = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+	return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** A JPEG no bigger than the kiosk screen, turned the right way up. Falls back to the original. */
+async function shrink(file) {
+	try {
+		const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+		const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
+		if (scale === 1 && file.type === "image/jpeg" && file.size < 1.5e6) return file;
+		const canvas = new OffscreenCanvas(Math.round(bmp.width * scale), Math.round(bmp.height * scale));
+		canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+		bmp.close();
+		const blob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.85 });
+		return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+	} catch {
+		return ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) ? file : null;
+	}
+}
+
+/** Uploads one at a time with progress. onEach(i) runs after file i is safely stored (or skipped). */
+async function addPhotos(files, { caption = "", people = "", onEach = async () => {} } = {}) {
+	let added = 0, dupes = 0, unreadable = 0, failed = 0;
+	for (const [i, file] of files.entries()) {
+		status(`Adding photo ${i + 1} of ${files.length}… keep this page open.`);
+		try {
+			const small = await shrink(file);
+			if (!small) {
+				unreadable++;
+				await onEach(i);
+				continue;
+			}
+			const fd = new FormData();
+			fd.append("file", small);
+			fd.append("hash", await sha256(file));
+			fd.append("caption", caption);
+			fd.append("people", people);
+			const r = await api("/photos", { method: "POST", body: fd });
+			added += r.ids.length;
+			dupes += r.duplicates ?? 0;
+			await onEach(i);
+		} catch (e) {
+			if (e.message === "signed out") throw e;
+			failed++;
+		}
+	}
+	const parts = [];
+	if (added || !dupes) parts.push(`Added ${added} photo${added === 1 ? "" : "s"} to the kiosk.`);
+	if (dupes) parts.push(added ? `${dupes} ${dupes === 1 ? "was" : "were"} already there.` : `${dupes === 1 ? "That photo is" : `Those ${dupes} photos are`} already on the kiosk.`);
+	if (unreadable) parts.push(`${unreadable} couldn't be read (not a photo this browser can open).`);
+	if (failed) parts.push(`${failed} didn't upload because the connection dropped. Open this page again to retry.`);
+	if (added) parts.push("They're at the top of the list below, if you'd like to add captions.");
+	status(parts.join(" "), failed || unreadable ? "bad" : "good");
+	await load();
+	$("#photos-section").scrollIntoView({ behavior: "smooth" });
+}
+
+$("#upload input[type=file]").addEventListener("change", async (ev) => {
+	const files = [...ev.target.files];
+	if (!files.length) return;
+	const form = $("#upload");
+	await addPhotos(files, { caption: form.caption.value.trim(), people: form.people.value.trim() });
 	form.reset();
-	toast("Uploaded");
-	load();
 });
+$("#upload").addEventListener("submit", (ev) => ev.preventDefault());
+
+/** Photos shared from the phone wait in the service worker's cache until they're uploaded. */
+async function processInbox() {
+	if (!("caches" in window)) return;
+	const cache = await caches.open("share-inbox");
+	const keys = (await cache.keys()).sort((a, b) => a.url.localeCompare(b.url));
+	if (!keys.length) return;
+	const files = [];
+	for (const req of keys) {
+		const res = await cache.match(req);
+		const blob = await res.blob();
+		files.push(new File([blob], decodeURIComponent(res.headers.get("X-Name") || "photo"), { type: blob.type }));
+	}
+	await addPhotos(files, { onEach: (i) => cache.delete(keys[i]) });
+}
+
+// One-time install, so "Mary's kiosk" appears in the phone's Share menu.
+let installPrompt = null;
+const standalone = matchMedia("(display-mode: standalone)").matches;
+function showInstall() {
+	$("#install-done").hidden = !standalone;
+	$("#install-ready").hidden = standalone || !installPrompt;
+	$("#install-manual").hidden = standalone || Boolean(installPrompt);
+}
+window.addEventListener("beforeinstallprompt", (e) => {
+	e.preventDefault();
+	installPrompt = e;
+	showInstall();
+});
+window.addEventListener("appinstalled", () => {
+	installPrompt = null;
+	$("#install-ready").hidden = true;
+	$("#install-manual").hidden = true;
+	$("#install-done").hidden = false;
+});
+$("#install").addEventListener("click", async () => {
+	if (!installPrompt) return;
+	installPrompt.prompt();
+	await installPrompt.userChoice;
+	installPrompt = null;
+	showInstall();
+});
+showInstall();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/admin/sw.js", { scope: "/admin/" }).catch(() => {});
+
+{
+	const q = new URLSearchParams(location.search);
+	const n = q.get("added");
+	if (n !== null) status(`Added ${n} photo${n === "1" ? "" : "s"} to the kiosk.`, "good");
+	if (n !== null || q.has("shared")) history.replaceState(null, "", "/admin/" + location.hash);
+}
 
 const google = new URLSearchParams(location.search).get("google");
 if (google) {
@@ -406,7 +525,7 @@ if (google) {
 	history.replaceState(null, "", "/admin/");
 }
 
-load();
+load().then(processInbox);
 // Refresh only the read-only parts, so an edit in progress isn't wiped.
 setInterval(async () => {
 	try {

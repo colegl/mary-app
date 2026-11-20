@@ -147,7 +147,7 @@ The kiosk key and the key that encrypts the calendar address are generated on th
 
 ### 7. Fill in the admin page
 
-- **Photos**: upload, caption ("Molly, your niece"), and People for event-linked photos.
+- **Photos**: easiest from the Pixel. Once, open the admin page in Chrome on the phone and tap **Add Mary's kiosk to this phone** in the Photos box (or ⋮ → Add to Home screen → Install). From then on, in Google Photos select pictures → **Share** → **Mary's kiosk**. They're shrunk to screen size and uploaded; duplicates are skipped. Captions ("Molly, your niece") and People (for event-linked photos) are optional and can be added later under each photo. **Choose photos to add** in the admin page works too.
 - **Medication schedule**: set the three times, upload a photo of each pillbox compartment, tick **On**, Save. Nothing reminds until a dose is on.
 - **Settings**: Coming up 3 or 7 days, morning Today time, minutes before events.
 - **Events**: add display text where the calendar title isn't what Mary should read.
