@@ -16,6 +16,7 @@ const [existingPath, outPath] = process.argv.slice(2);
 const existing = JSON.parse(readFileSync(existingPath, "utf8")).map((s) => s.name);
 
 const FROM_GITHUB = [
+	"ADMIN_PASSWORD",
 	"GOOGLE_CLIENT_ID",
 	"GOOGLE_CLIENT_SECRET",
 	"NTFY_TOPIC",

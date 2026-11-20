@@ -35,6 +35,11 @@ async function api(path, opts = {}) {
 		init.body = JSON.stringify(opts.json);
 	}
 	const res = await fetch(`/api/admin${path}`, init);
+	if (res.status === 403) {
+		// Session ended: back to the sign-in page.
+		location.href = "/admin/login";
+		throw new Error("signed out");
+	}
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error(body.error ?? `${res.status}`);
 	return body;

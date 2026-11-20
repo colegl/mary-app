@@ -21,6 +21,7 @@ export interface Env {
 	NTFY_TOKEN?: string;
 	PUSHOVER_TOKEN?: string;
 	PUSHOVER_USER?: string;
+	ADMIN_PASSWORD?: string;
 	ADMIN_DEV_BYPASS?: string;
 }
 
