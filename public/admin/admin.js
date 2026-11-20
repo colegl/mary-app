@@ -105,6 +105,14 @@ function doseStatus(d) {
 	return parts.join(" · ");
 }
 
+function renderPhone() {
+	const n = data.ntfy;
+	$("#phone").hidden = !n;
+	if (!n) return;
+	$("#ntfy-app").href = n.app;
+	$("#ntfy-topic").textContent = n.topic;
+}
+
 function renderDoses() {
 	const rows = data.doses.map((d) => {
 		const open = !d.confirmed_at && !d.skipped_at;
@@ -270,6 +278,7 @@ async function load() {
 		return;
 	}
 	renderStatus();
+	renderPhone();
 	renderDoses();
 	renderSchedule();
 	renderEvents();
@@ -278,6 +287,15 @@ async function load() {
 	renderAlerts();
 }
 
+$("#ntfy-copy").addEventListener("click", async () => {
+	try {
+		await navigator.clipboard.writeText(data.ntfy.topic);
+		toast("Copied");
+	} catch {
+		toast("Couldn't copy; press and hold the name to copy it");
+	}
+});
+$("#test-alert-2").addEventListener("click", () => $("#test-alert").click());
 $("#test-alert").addEventListener("click", async () => {
 	const r = await api("/test-alert", { json: {} });
 	toast(r.ok ? "Test alert sent. Check your phone." : "Alert didn't go through. See Recent alerts.");

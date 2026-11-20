@@ -53,6 +53,8 @@ th { color: var(--soft); font-weight: 400; font-size: 14px; }
 #toast.on { opacity: 1; }
 .event-text { width: 100%; min-width: 220px; }
 code { font-size: 13px; word-break: break-all; }
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 12px; }
+.steps .btn, .steps button { margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -68,6 +70,20 @@ code { font-size: 13px; word-break: break-all; }
 			<a class="btn" id="google-connect" href="/oauth/google/start">Connect Google Calendar</a>
 			<button id="google-disconnect" hidden>Disconnect Google</button>
 		</div>
+	</section>
+
+	<section id="phone" hidden><h2>Phone alerts</h2>
+		<p class="muted">Do this on your Pixel, with this admin page open on the phone.</p>
+		<ol class="steps">
+			<li>Install the <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">ntfy app from the Play Store</a>, open it once, and allow notifications.</li>
+			<li>Come back here and tap <a class="btn primary" id="ntfy-app" href="#">Subscribe in the ntfy app</a>, then <b>Subscribe</b> in the app.</li>
+			<li>Tap <button id="test-alert-2">Send a test alert</button>. It should arrive on the phone within a few seconds.</li>
+		</ol>
+		<details><summary class="muted">If the Subscribe button doesn't open the app</summary>
+			<p>In the ntfy app, tap <b>+</b>, paste this topic name, and tap <b>Subscribe</b>:</p>
+			<p class="row"><code id="ntfy-topic"></code> <button id="ntfy-copy">Copy</button></p>
+			<p class="muted">Keep this name private: anyone who knows it can read the alerts.</p>
+		</details>
 	</section>
 
 	<section><h2>Doses</h2>
