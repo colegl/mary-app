@@ -1,0 +1,23 @@
+{
+	"name": "Mary's kiosk",
+	"short_name": "Mary's kiosk",
+	"description": "Add photos to Mary's picture frame and check on her doses.",
+	"id": "/admin/",
+	"start_url": "/admin/",
+	"scope": "/admin/",
+	"display": "standalone",
+	"background_color": "#f6f2ea",
+	"theme_color": "#1d6b66",
+	"icons": [
+		{ "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+		{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+	],
+	"share_target": {
+		"action": "/admin/share",
+		"method": "POST",
+		"enctype": "multipart/form-data",
+		"params": {
+			"files": [{ "name": "file", "accept": ["image/*", ".jpg", ".jpeg", ".png", ".webp"] }]
+		}
+	}
+}
