@@ -36,6 +36,8 @@ export async function verifyAccess(env: Env, request: Request): Promise<AccessUs
 	if (env.ADMIN_DEV_BYPASS === "1" && new URL(request.url).hostname === "127.0.0.1") {
 		return { email: "dev@localhost" };
 	}
+	// Access not set up (the default): only the password sign-in applies.
+	if (!env.ACCESS_AUD || env.ACCESS_AUD.startsWith("YOUR-") || env.ACCESS_TEAM_DOMAIN.includes("YOUR-TEAM")) return null;
 	const token =
 		request.headers.get("Cf-Access-Jwt-Assertion") ??
 		/(?:^|;\s*)CF_Authorization=([^;]+)/.exec(request.headers.get("Cookie") ?? "")?.[1];

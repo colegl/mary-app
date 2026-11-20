@@ -16,7 +16,7 @@ The spec and the screen mockups are the source of truth for behaviour and look:
 ```
 Chromebook (kiosk PWA)  ──device token──▶  Worker  ──▶ D1 (events, schedule, dose log, heartbeats, alerts)
                                              │  ├──▶ R2 (photos, pillbox photos; private)
-Gary's browser (/admin) ──Cloudflare Access─▶│  ├──▶ Google Calendar API (read-only, every 15 min)
+Gary's browser (/admin) ──password──────────▶│  ├──▶ Google Calendar API (read-only, every 15 min)
                                              │  └──▶ ntfy or Pushover ──▶ Gary's Pixel
                                 Cron, every minute: dose watcher, kiosk-offline check, sync
 ```
@@ -27,7 +27,8 @@ Gary's browser (/admin) ──Cloudflare Access─▶│  ├──▶ Google Ca
 | `src/doses.ts` | Dose rows, the watcher (re-remind, alert at the window), confirmations, overrides, test doses |
 | `src/calendar.ts` | Google OAuth, the `(Mary)` event sync, the mock source |
 | `src/alerts.ts` | ntfy / Pushover delivery; every alert is also logged in D1 |
-| `src/access.ts` | Verifies the Cloudflare Access JWT on admin routes |
+| `src/password.ts` | Admin sign-in with `ADMIN_PASSWORD` (30-day signed cookie, lockout after 10 wrong tries) |
+| `src/access.ts` | Optional: verifies a Cloudflare Access JWT on admin routes |
 | `public/app/` | The kiosk: `app.js` (screens and loop), `style.css` |
 | `public/app/shared/` | Wording ("11:30 in the morning") and dose logic, used by both the kiosk and the Worker |
 | `public/admin/` | Gary's admin page |
@@ -53,7 +54,7 @@ Everything happens in the Cloudflare and GitHub websites. You don't need wrangle
 
 - It runs the tests.
 - It creates the D1 database and R2 photo bucket if they're missing, and applies database migrations.
-- It generates the kiosk key once, copies your other secrets to the Worker, and deploys.
+- It generates the kiosk key once, copies your other secrets (admin password, alerts, Google) to the Worker, and deploys.
 - It runs on every merge to `main`, and whenever you press **Run workflow**. After you change a secret or variable, press **Run workflow** so the change takes effect.
 
 ### 1. Prepare Cloudflare (once)
@@ -81,24 +82,20 @@ In the repository on GitHub, go to **Settings → Secrets and variables → Acti
 | `CLOUDFLARE_API_TOKEN` | the token from step 2 |
 | `CLOUDFLARE_ACCOUNT_ID` | the Account ID from step 1 |
 
-Then go to **Actions → Deploy → Run workflow**. When it finishes, its summary shows the kiosk address, the admin address and the Google redirect URI. The kiosk itself already works now. The admin page answers "Forbidden" until step 4, and that's intended.
+Then go to **Actions → Deploy → Run workflow**. When it finishes, its summary shows the kiosk address, the admin address and the Google redirect URI. The kiosk itself already works now. The admin page stays locked until step 4, and that's intended.
 
-### 4. Lock the admin page with Cloudflare Access
+### 4. Set the admin password
 
-In the Cloudflare dashboard, open **Zero Trust**. It's free for up to 50 users, and it may ask you to pick a team name and the free plan. Then go to **Access → Applications → Add an application → Self-hosted**:
+1. In the repository on GitHub, go to **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name: `ADMIN_PASSWORD`. Secret: a password you'll remember, ideally four or more random words. Click **Add secret**.
+3. Go to **Actions → Deploy → Run workflow**.
 
-- **Application domain:** your `mary-kiosk.<subdomain>.workers.dev` host, added **three** times with the paths `admin`, `api/admin` and `oauth`.
-- **Identity provider:** One-time PIN to your email is the quickest. Google also works.
-- **Policy:** Allow, with Include → Emails → your email address only.
+Now `/admin/` shows a sign-in box. You stay signed in on that browser for 30 days, and there's a **Sign out** link next to the title. After 10 wrong tries in 15 minutes, sign-in pauses for 15 minutes. To change the password, update the secret and run the workflow again.
 
-After saving, open the application and copy its **Application Audience (AUD) Tag**. In GitHub, go to **Settings → Secrets and variables → Actions → Variables tab → New repository variable** and add:
+<details><summary>Optional: Cloudflare Access instead of (or as well as) the password</summary>
 
-| Variable | Value |
-|---|---|
-| `ACCESS_TEAM_DOMAIN` | `https://<your team name>.cloudflareaccess.com` |
-| `ACCESS_AUD` | the AUD tag |
-
-Then **Run workflow** again. Now `/admin/` asks you to sign in, and then opens. The Worker checks the Access token itself as well, so the admin routes stay closed even if the Access app is misconfigured.
+In Zero Trust, add a Self-hosted application for your `workers.dev` host with the paths `admin`, `api/admin` and `oauth`, allowing only your email. Then add the repository variables `ACCESS_TEAM_DOMAIN` (`https://<team>.cloudflareaccess.com`) and `ACCESS_AUD` (the application's AUD tag), and run the workflow. Once both are set, either an Access sign-in or the password opens the admin page.
+</details>
 
 ### 5. Phone alerts (Pixel)
 
@@ -177,7 +174,7 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Open http://127.0.0.1:8790/admin/ (Access is bypassed locally by `ADMIN_DEV_BYPASS=1`), turn on the doses, then open http://127.0.0.1:8790/#setup=dev-kiosk-token-change-me for the kiosk. The mock calendar is used locally. `curl http://127.0.0.1:8790/__scheduled` runs the cron once.
+Open http://127.0.0.1:8790/admin/ (the sign-in is skipped locally by `ADMIN_DEV_BYPASS=1`), turn on the doses, then open http://127.0.0.1:8790/#setup=dev-kiosk-token-change-me for the kiosk. The mock calendar is used locally. `curl http://127.0.0.1:8790/__scheduled` runs the cron once.
 
 ```sh
 npm test          # wording and dose logic
@@ -188,4 +185,4 @@ When you change kiosk code, bump `APP_VERSION` in both `src/env.ts` and `public/
 
 ## Not built yet
 
-The optional MCP endpoint (asking Claude "Did Mary take her noon pills?") from phase 4. It needs the same OAuth setup as the Spotify MCP server rather than Cloudflare Access, so it's a separate piece of work. The menu has room for a third button when one is wanted.
+The optional MCP endpoint (asking Claude "Did Mary take her noon pills?") from phase 4. It needs the same OAuth setup as the Spotify MCP server, so it's a separate piece of work. The menu has room for a third button when one is wanted.

@@ -96,6 +96,7 @@ jobs:
 
       - name: Prepare secrets
         env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
@@ -140,8 +141,11 @@ jobs:
       - name: Summary
         env:
           PUBLIC_URL: ${{ steps.url.outputs.url }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ACCESS_AUD: ${{ vars.ACCESS_AUD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
         run: |
           {
             echo "### Deployed"
@@ -149,11 +153,14 @@ jobs:
             echo "- Kiosk: $PUBLIC_URL"
             echo "- Admin: $PUBLIC_URL/admin/"
             echo "- Google sign-in redirect URI: $PUBLIC_URL/oauth/google/callback"
-            if [ -z "$ACCESS_AUD" ]; then
+            if [ -z "$ADMIN_PASSWORD" ] && [ -z "$ACCESS_AUD" ]; then
               echo ""
-              echo "**Next:** the admin page stays locked until Cloudflare Access is set up and the ACCESS_TEAM_DOMAIN and ACCESS_AUD variables are added (README step 4)."
+              echo "**Next:** the admin page is locked until you add an ADMIN_PASSWORD secret (README step 4)."
+            elif [ -z "$NTFY_TOPIC" ] && [ -z "$PUSHOVER_USER" ]; then
+              echo ""
+              echo "**Next:** phone alerts (README step 5)."
             elif [ -z "$GOOGLE_CLIENT_ID" ]; then
               echo ""
-              echo "**Next:** connect Google Calendar (README step 5)."
+              echo "**Next:** connect Google Calendar (README step 6)."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

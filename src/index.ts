@@ -1,6 +1,7 @@
 import { Hono, type Context, type Next } from "hono";
 import { APP_VERSION, type Env } from "./env";
 import { verifyAccess } from "./access";
+import { checkPassword, clearCookie, hasSession, loginPage, passwordEnabled, sessionCookie } from "./password";
 import { safeEqual } from "./crypto";
 import { deleteSetting, getSetting, getSettings, intSetting, setSetting } from "./db";
 import { sendAlert } from "./alerts";
@@ -40,10 +41,21 @@ async function kioskAuth(c: Context<App>, next: Next) {
 	await next();
 }
 
+/** Admin is open to a valid Cloudflare Access sign-in or a valid password session. */
+async function isAdmin(c: Context<App>): Promise<boolean> {
+	if (await verifyAccess(c.env, c.req.raw)) return true;
+	return hasSession(c.env, c.req.raw);
+}
+
 async function adminAuth(c: Context<App>, next: Next) {
-	const user = await verifyAccess(c.env, c.req.raw);
-	if (!user) return c.text("Forbidden: sign in through Cloudflare Access.", 403);
-	await next();
+	if (await isAdmin(c)) return next();
+	// Pages go to the sign-in form; API calls just get refused.
+	if (c.req.method === "GET" && !c.req.path.startsWith("/api/")) {
+		return passwordEnabled(c.env)
+			? c.redirect("/admin/login")
+			: c.text("The admin page is locked. Add an ADMIN_PASSWORD secret in GitHub and run the Deploy workflow.", 403);
+	}
+	return c.json({ error: "Signed out. Reload the page to sign in." }, 403);
 }
 
 // ---------- Shapes sent to the kiosk ----------
@@ -414,6 +426,28 @@ app.get("/oauth/google/callback", adminAuth, async (c) => {
 });
 
 app.get("/admin", (c) => c.redirect("/admin/"));
+app.get("/admin/login", async (c) => {
+	if (await isAdmin(c)) return c.redirect("/admin/");
+	if (!passwordEnabled(c.env)) return c.text("The admin page is locked. Add an ADMIN_PASSWORD secret in GitHub and run the Deploy workflow.", 403);
+	return c.html(loginPage());
+});
+app.post("/admin/login", async (c) => {
+	if (!passwordEnabled(c.env)) return c.text("No admin password is set.", 403);
+	const form = await c.req.formData();
+	const result = await checkPassword(c.env, String(form.get("password") ?? ""), Date.now());
+	if (result === "ok") {
+		c.header("Set-Cookie", await sessionCookie(c.env));
+		return c.redirect("/admin/");
+	}
+	// Slow down guessing.
+	await new Promise((r) => setTimeout(r, 1000));
+	const msg = result === "locked" ? "Too many wrong tries. Wait 15 minutes and try again." : "That password didn't match.";
+	return c.html(loginPage(msg), 401);
+});
+app.get("/admin/logout", (c) => {
+	c.header("Set-Cookie", clearCookie());
+	return c.redirect("/admin/login");
+});
 app.all("/admin/*", adminAuth, (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
