@@ -4,7 +4,7 @@ import { verifyAccess } from "./access";
 import { checkPassword, clearCookie, hasSession, loginPage, passwordEnabled, sessionCookie } from "./password";
 import { safeEqual } from "./crypto";
 import { deleteSetting, getSetting, getSettings, intSetting, setSetting } from "./db";
-import { sendAlert } from "./alerts";
+import { ntfyServer, ntfyTopic, sendAlert } from "./alerts";
 import { googleAuthUrl, googleCallback, syncWithAlerts } from "./calendar";
 import {
 	cancelTestDoses,
@@ -218,6 +218,14 @@ admin.get("/overview", async (c) => {
 		app_version: APP_VERSION,
 		calendar_source: env.CALENDAR_SOURCE,
 		alert_provider: env.ALERT_PROVIDER,
+		ntfy:
+			env.ALERT_PROVIDER === "pushover"
+				? null
+				: await (async () => {
+						const topic = await ntfyTopic(env);
+						const server = ntfyServer(env);
+						return { topic, server, web: `${server}/${encodeURIComponent(topic)}`, app: `ntfy://${new URL(server).host}/${encodeURIComponent(topic)}` };
+					})(),
 		google_connected: Boolean(settings.google_refresh),
 		sync: {
 			last_ok: settings.last_sync_ok ? Number(settings.last_sync_ok) : null,

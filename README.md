@@ -99,13 +99,13 @@ In Zero Trust, add a Self-hosted application for your `workers.dev` host with th
 
 ### 5. Phone alerts (Pixel)
 
-**ntfy** (recommended, free):
+Nothing to set up in GitHub. The Worker makes up its own private ntfy topic, and the admin page's **Phone alerts** section walks you through it on the phone:
 
-1. Install the ntfy app from the Play Store.
-2. Make up a long, unguessable topic name, for example `mary-` followed by 20 random letters. Anyone who knows the name can read the alerts.
-3. In the app, subscribe to that topic. In the topic's settings, turn on **Instant delivery** and let high-priority notifications make sound.
-4. Add the topic name as a GitHub secret named `NTFY_TOPIC`, then **Run workflow**.
-5. In the admin page, press **Send a test alert to my phone**.
+1. Install the ntfy app from the Play Store and allow notifications.
+2. Open the admin page on the Pixel and tap **Subscribe in the ntfy app**.
+3. Tap **Send a test alert**.
+
+Keep the topic private: anyone who knows it can read the alerts. To use a topic of your own instead, add it as a GitHub secret named `NTFY_TOPIC` and run the workflow.
 
 **Pushover** instead: create an application at pushover.net and add these to GitHub:
 

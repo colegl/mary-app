@@ -144,8 +144,6 @@ jobs:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           ACCESS_AUD: ${{ vars.ACCESS_AUD }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
-          PUSHOVER_USER: ${{ secrets.PUSHOVER_USER }}
         run: |
           {
             echo "### Deployed"
@@ -156,9 +154,6 @@ jobs:
             if [ -z "$ADMIN_PASSWORD" ] && [ -z "$ACCESS_AUD" ]; then
               echo ""
               echo "**Next:** the admin page is locked until you add an ADMIN_PASSWORD secret (README step 4)."
-            elif [ -z "$NTFY_TOPIC" ] && [ -z "$PUSHOVER_USER" ]; then
-              echo ""
-              echo "**Next:** phone alerts (README step 5)."
             elif [ -z "$GOOGLE_CLIENT_ID" ]; then
               echo ""
               echo "**Next:** connect Google Calendar (README step 6)."
