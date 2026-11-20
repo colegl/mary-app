@@ -26,4 +26,4 @@ export interface Env {
 }
 
 /** App version the kiosk compares against to know when to reload (at 3 AM). Bump on deploy. */
-export const APP_VERSION = "0.1.0";
+export const APP_VERSION = "0.1.1";
