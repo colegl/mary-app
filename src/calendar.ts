@@ -7,6 +7,7 @@ import { deleteSetting, getSetting, getSettings, intSetting, setSetting } from "
 import { sendAlert } from "./alerts";
 import { addDays, localParts, zonedToUtc } from "../public/app/shared/words.js";
 import mock from "../mock/events.json";
+import { parseMaryEvents } from "./ical";
 
 const SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 const PREFIX = /^\s*\(mary\)\s*/i;
@@ -179,18 +180,66 @@ export function mockEvents(env: Env, now: number): SyncedEvent[] {
 	});
 }
 
+// ---------- iCal secret address ----------
+
+/** Downloads the calendar feed. Errors are worded for the admin page. */
+export async function fetchIcal(url: string): Promise<string> {
+	let res: Response;
+	try {
+		res = await fetch(url, { headers: { Accept: "text/calendar" }, redirect: "follow" });
+	} catch {
+		throw new Error("Couldn't reach that address. Check it was copied in full.");
+	}
+	if (res.status === 404 || res.status === 403 || res.status === 401) {
+		throw new Error("Google says that address isn't valid (it may have been reset). Copy it again from Google Calendar settings.");
+	}
+	if (!res.ok) throw new Error(`The calendar address answered with error ${res.status}.`);
+	const text = await res.text();
+	if (!text.includes("BEGIN:VCALENDAR")) {
+		throw new Error("That address doesn't return a calendar. Use the one labelled \"Secret address in iCal format\".");
+	}
+	return text;
+}
+
+export async function icalUrl(env: Env): Promise<string | null> {
+	const sealed = await getSetting(env, "ical_url");
+	return sealed ? decrypt(env.TOKEN_ENCRYPTION_KEY, sealed) : null;
+}
+
+/** Which source the sync uses: a pasted iCal address wins, then mock (dev), then Google sign-in. */
+export async function calendarSource(env: Env): Promise<"ical" | "mock" | "google" | "none"> {
+	if (await getSetting(env, "ical_url")) return "ical";
+	if (env.CALENDAR_SOURCE === "mock") return "mock";
+	if (await getSetting(env, "google_refresh")) return "google";
+	return "none";
+}
+
+/** The sync window: today through the lookahead (at least a week). */
+export async function syncWindow(env: Env, now: number): Promise<{ from: number; to: number }> {
+	const settings = await getSettings(env);
+	const days = Math.max(intSetting(settings, "lookahead_days", 3), 7) + 1;
+	const today = localParts(now, env.TIMEZONE).date;
+	return { from: zonedToUtc(today, "00:00", env.TIMEZONE), to: zonedToUtc(addDays(today, days), "00:00", env.TIMEZONE) };
+}
+
 // ---------- Sync ----------
 
 /** Pull events for today through the lookahead window and store them. */
 export async function syncCalendar(env: Env, now: number): Promise<{ count: number }> {
-	const settings = await getSettings(env);
-	const days = Math.max(intSetting(settings, "lookahead_days", 3), 7) + 1;
-	const today = localParts(now, env.TIMEZONE).date;
-	const from = zonedToUtc(today, "00:00", env.TIMEZONE);
-	const to = zonedToUtc(addDays(today, days), "00:00", env.TIMEZONE);
+	const { from, to } = await syncWindow(env, now);
+	const source = await calendarSource(env);
+	if (source === "none") throw new Error("No calendar connected yet. Paste the calendar's secret address on the admin page.");
 
-	const events = env.CALENDAR_SOURCE === "mock" ? mockEvents(env, now) : await fetchGoogle(env, from, to);
-	const calendarId = env.CALENDAR_SOURCE === "mock" ? "mock" : env.CALENDAR_ID;
+	let events: SyncedEvent[];
+	if (source === "ical") {
+		const url = await icalUrl(env);
+		events = parseMaryEvents(await fetchIcal(url!), from, to, env.TIMEZONE);
+	} else if (source === "mock") {
+		events = mockEvents(env, now);
+	} else {
+		events = await fetchGoogle(env, from, to);
+	}
+	const calendarId = source === "google" ? env.CALENDAR_ID : source;
 
 	const stmts: D1PreparedStatement[] = events.map((e) =>
 		env.DB.prepare(
@@ -214,6 +263,8 @@ export async function syncCalendar(env: Env, now: number): Promise<{ count: numb
 
 /** Cron wrapper: tracks consecutive failures and alerts Gary after two in a row. */
 export async function syncWithAlerts(env: Env, now: number): Promise<void> {
+	// Nothing connected yet is a setup step, not a failure worth alerting about.
+	if ((await calendarSource(env)) === "none") return;
 	try {
 		await syncCalendar(env, now);
 		await setSetting(env, "last_sync_ok", String(now));
