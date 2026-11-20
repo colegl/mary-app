@@ -21,14 +21,14 @@ import {
 } from "./shared/words.js";
 import { activeReminder, chimeKey, doseState, isClosed, stripStatus } from "./shared/doses.js";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.1.1";
 const SEC = 1000;
 const MIN = 60 * SEC;
 const IDLE_MS = 60 * SEC;
 const DONE_MS = 10 * SEC;
 const PHOTO_MS = 30 * SEC;
 const STATE_MS = 1 * MIN;
-const PHOTOS_LIST_MS = 30 * MIN;
+const PHOTOS_LIST_MS = 5 * MIN;
 const HEARTBEAT_MS = 5 * MIN;
 const MAX_TODAY_ROWS = 5;
 const MAX_COMING_CARDS = 4;
@@ -71,6 +71,9 @@ if (!deviceId) {
 
 let state = store.get("state", null); // last good /api/state
 let photos = store.get("photos", []); // last good /api/photos list
+// Photos Gary just added are shown next, once each, before the slideshow carries on.
+let seenPhotos = store.get("seenPhotos", null); // ids already on this kiosk; null until the first list arrives
+let freshPhotos = store.get("freshPhotos", []); // ids waiting for their first showing
 let pending = store.get("pending", {}); // doseId -> tapped_at, not yet acknowledged by the server
 let chimed = store.get("chimed", {}); // chime key -> time played
 let shown = store.get("shown", {}); // proactive Today shows already done: key -> time
@@ -110,12 +113,45 @@ async function refreshState() {
 	}
 }
 
+function noteNewPhotos() {
+	const ids = photos.map((p) => p.id);
+	if (seenPhotos === null) {
+		seenPhotos = ids; // first run: everything counts as already seen
+	} else {
+		const known = new Set([...seenPhotos, ...freshPhotos]);
+		for (const id of ids) if (!known.has(id)) freshPhotos.push(id);
+		const live = new Set(ids);
+		seenPhotos = seenPhotos.filter((id) => live.has(id));
+		freshPhotos = freshPhotos.filter((id) => live.has(id));
+	}
+	store.set("seenPhotos", seenPhotos);
+	store.set("freshPhotos", freshPhotos);
+}
+
+/** The next photo: a brand-new one if any are waiting, otherwise the regular order. */
+function nextPhoto(order, take) {
+	const fresh = freshPhotos.length ? photos.find((p) => p.id === freshPhotos[0]) : null;
+	if (fresh) {
+		if (take) {
+			freshPhotos.shift();
+			seenPhotos.push(fresh.id);
+			store.set("freshPhotos", freshPhotos);
+			store.set("seenPhotos", seenPhotos);
+		}
+		return fresh;
+	}
+	const p = order[photoIndex % order.length];
+	if (take) photoIndex++;
+	return p;
+}
+
 async function refreshPhotos() {
 	if (!token()) return;
 	try {
 		const body = await api("/api/photos");
 		photos = body.photos ?? [];
 		store.set("photos", photos);
+		noteNewPhotos();
 		pruneBlobCache();
 	} catch {
 		/* keep the cached list */
@@ -380,8 +416,7 @@ function frameScreen(now) {
 async function showPhoto() {
 	if (current.name !== "frame" || !photos.length) return;
 	const order = photoOrder(Date.now());
-	const p = order[photoIndex % order.length];
-	photoIndex++;
+	const p = nextPhoto(order, true);
 	const src = await photoSrc(p.url);
 	if (!src || current.name !== "frame") return;
 	const main = root.querySelector("img.main");
@@ -404,7 +439,7 @@ async function showPhoto() {
 	};
 	img.src = src;
 	// Warm the next one so the swap is instant.
-	const next = order[photoIndex % order.length];
+	const next = nextPhoto(order, false);
 	if (next) photoSrc(next.url);
 }
 
