@@ -160,8 +160,14 @@ code { font-size: 13px; word-break: break-all; }
 			<label>Coming up shows <select id="s-look"><option value="3">3 days</option><option value="7">7 days</option></select></label>
 			<label>Show Today each morning at <input type="time" id="s-morning"></label>
 			<label>Show Today <input type="number" id="s-pre" min="0" max="240"> min before an event</label>
-			<button id="save-settings">Save</button>
 		</div>
+		<div class="row" style="margin-top:10px">
+			<label><input type="checkbox" id="s-night"> Night screen</label>
+			<label>from <input type="time" id="s-night-start"></label>
+			<label>to <input type="time" id="s-night-end"></label>
+		</div>
+		<p class="muted">At night the kiosk shows only a dim clock with the day and date, so it doesn't light up the room. Medication reminders still come up. A tap says it's night-time.</p>
+		<div class="row"><button class="primary" id="save-settings">Save settings</button></div>
 	</section>
 
 	<section><h2>Kiosk setup</h2>

@@ -1,6 +1,6 @@
 # Mary's helper kiosk
 
-A picture frame for Mary that also keeps her oriented, shows her day, and reminds her to take her pills, with Gary alerted on his Pixel when a dose goes unconfirmed. It runs on an Acer Chromebook 713 in tent mode as a full-screen web app, served by one Cloudflare Worker.
+A picture frame for Mary that also keeps her oriented, shows her day, and reminds her to take her pills, with Gary alerted on his Pixel when a dose goes unconfirmed. It runs as a full-screen web app on an Amazon Fire HD 10 (originally an Acer Chromebook 713 in tent mode), served by one Cloudflare Worker.
 
 The spec and the screen mockups are the source of truth for behaviour and look:
 [spec](https://claude.ai/artifact/K57eXxiatQcpppEQsm9KJq) · [screens](https://claude.ai/artifact/HVf8ThLPEtNsRxqWVxEgxr).
@@ -14,7 +14,7 @@ The spec and the screen mockups are the source of truth for behaviour and look:
 ## How it fits together
 
 ```
-Chromebook (kiosk PWA)  ──device token──▶  Worker  ──▶ D1 (events, schedule, dose log, heartbeats, alerts)
+Fire tablet (kiosk PWA) ──device token──▶  Worker  ──▶ D1 (events, schedule, dose log, heartbeats, alerts)
                                              │  ├──▶ R2 (photos, pillbox photos; private)
 Gary's browser (/admin) ──password──────────▶│  ├──▶ Google Calendar secret iCal address (every 15 min)
                                              │  └──▶ ntfy or Pushover ──▶ Gary's Pixel
@@ -44,6 +44,7 @@ Gary's browser (/admin) ──password──────────▶│  ├�
 - **Reminder**: at the dose time the reminder covers any screen with a chime. At +30 min it chimes again. At +60 min (the "window") Gary gets a push. The reminder stays up for 3 hours by default ("Reminder stays up" in the admin page), then quietly goes away; a missed dose never shows Mary an error.
 - **Double-dose guard**: once she taps **I took them** (even offline), that dose can't remind again, and the frame strip shows "Noon pills done" until the next dose comes due. If Gary was already alerted and her tap arrives later, he gets a "confirmed late" follow-up.
 - **Gary's overrides**: Mark done, Skip, or Undo any dose in the admin page.
+- **Night screen** (default 9 PM to 7 AM, set in Settings): photos and menus give way to a dim clock with the day and date. A tap says "It's night-time." Medication reminders still come up over it. In Fully Kiosk Browser with its JavaScript Interface on, the backlight is turned down too.
 - **Proactive Today**: shown once each morning (default 8:30) and 60 minutes before each timed event, then back to the frame after 60 s.
 - **Offline**: photos, today's items and dose times are cached; taps are queued and sent on reconnect. The server alerts Gary after 15 minutes without a heartbeat, and after 2 failed calendar syncs in a row.
 - **Nightly reload** at 3 AM picks up new versions.
@@ -149,7 +150,7 @@ The kiosk key and the key that encrypts the calendar address are generated on th
 
 - **Photos**: easiest from the Pixel. Once, open the admin page in Chrome on the phone and tap **Add Mary's kiosk to this phone** in the Photos box (or ⋮ → Add to Home screen → Install). From then on, in Google Photos select pictures → **Share** → **Mary's kiosk**. They're shrunk to screen size and uploaded; duplicates are skipped. Captions ("Molly, your niece") and People (for event-linked photos) are optional and can be added later under each photo. **Choose photos to add** in the admin page works too.
 - **Medication schedule**: set the three times, upload a photo of each pillbox compartment, tick **On**, Save. Nothing reminds until a dose is on.
-- **Settings**: Coming up 3 or 7 days, morning Today time, minutes before events.
+- **Settings**: Coming up 3 or 7 days, morning Today time, minutes before events, and the night screen's hours.
 - **Events**: add display text where the calendar title isn't what Mary should read.
 
 ### 8. Set up the Chromebook
@@ -163,6 +164,13 @@ The kiosk only needs Chrome. Linux on the Chromebook isn't used.
 5. Chrome menu → **Cast, save and share → Install page as app**. Open the installed app, then make it full screen (the full-screen key, or right-click its shelf icon → New window → Full screen). Pin it to the shelf. If the app's settings (Settings → Apps → Manage your apps) offer **Open at login**, turn that on so it comes back after a restart.
 6. Tap the screen once after each start: that unlocks the chime, which ChromeOS blocks until a first touch. (With option B, the managed kiosk license, autoplay can be allowed by policy.)
 7. Turn the volume to low-medium, flip into tent mode, and watch for the first heartbeat under Status.
+
+### 8b. Or an Amazon Fire HD 10 (the current display)
+
+1. Install **Fully Kiosk Browser** (or use Chrome), and keep the tablet plugged in with the screen set never to turn off.
+2. Open the setup link from **Kiosk setup** once on the tablet, then set the kiosk address as Fully's start page.
+3. In Fully's settings, turn on **Advanced Web Settings → Enable JavaScript Interface** if your licence allows it, so the night screen can lower the backlight. Without it, the night screen is just very dark.
+4. Tap the screen once after each start to unlock the chime.
 
 ### 9. Do the dry run
 
