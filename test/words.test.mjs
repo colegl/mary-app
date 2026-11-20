@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addDays, dayLabel, localParts, partOfDay, rangeWords, timeWords, zonedToUtc, dayAndPart, clockText } from "../public/app/shared/words.js";
+import { addDays, dayLabel, localParts, partOfDay, rangeWords, timeWords, zonedToUtc, dayAndPart, clockText, isNight } from "../public/app/shared/words.js";
 
 test("time words read naturally", () => {
 	assert.equal(timeWords(11, 30), "11:30 in the morning");
@@ -53,4 +53,15 @@ test("day labels", () => {
 	assert.deepEqual(dayLabel("2026-12-04", "2026-12-01"), { main: "Friday", sub: "December 4" });
 	assert.deepEqual(dayLabel("2026-12-08", "2026-12-01"), { main: "Next Tuesday", sub: "December 8" });
 	assert.equal(addDays("2026-12-31", 1), "2027-01-01");
+});
+
+test("night window, including across midnight", () => {
+	assert.equal(isNight(21, 0, "21:00", "07:00"), true);
+	assert.equal(isNight(20, 59, "21:00", "07:00"), false);
+	assert.equal(isNight(2, 30, "21:00", "07:00"), true);
+	assert.equal(isNight(6, 59, "21:00", "07:00"), true);
+	assert.equal(isNight(7, 0, "21:00", "07:00"), false);
+	assert.equal(isNight(13, 0, "12:00", "14:00"), true);
+	assert.equal(isNight(1, 0, "07:00", "07:00"), false);
+	assert.equal(isNight(1, 0, "", "07:00"), false);
 });

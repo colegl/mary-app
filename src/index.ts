@@ -126,6 +126,7 @@ kiosk.get("/state", async (c) => {
 		lookahead_days: lookahead,
 		morning_show: settings.morning_show ?? "08:30",
 		preevent_min: intSetting(settings, "preevent_min", 60),
+		night: nightSettings(settings),
 		events: events.map((e) => ({
 			id: e.id,
 			date: e.start_date,
@@ -238,6 +239,7 @@ admin.get("/overview", async (c) => {
 			lookahead_days: intSetting(settings, "lookahead_days", 3),
 			morning_show: settings.morning_show ?? "08:30",
 			preevent_min: intSetting(settings, "preevent_min", 60),
+			night: nightSettings(settings),
 		},
 		heartbeats: heartbeats.results,
 		doses: doses.results,
@@ -249,6 +251,11 @@ admin.get("/overview", async (c) => {
 });
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Night screen hours. On by default, 9 PM to 7 AM. */
+function nightSettings(settings: Record<string, string>) {
+	return { on: settings.night_on !== "0", start: settings.night_start ?? "21:00", end: settings.night_end ?? "07:00" };
+}
 
 admin.post("/schedule/:dose", async (c) => {
 	const dose = c.req.param("dose");
@@ -402,7 +409,23 @@ admin.delete("/photos/:id", async (c) => {
 });
 
 admin.post("/settings", async (c) => {
-	const b = await c.req.json<{ lookahead_days?: number; morning_show?: string; preevent_min?: number }>();
+	const b = await c.req.json<{
+		lookahead_days?: number;
+		morning_show?: string;
+		preevent_min?: number;
+		night_on?: boolean;
+		night_start?: string;
+		night_end?: string;
+	}>();
+	for (const k of ["night_start", "night_end"] as const) {
+		if (b[k] !== undefined && !HHMM.test(b[k]!)) return c.json({ error: "Night hours must be times like 21:00" }, 400);
+	}
+	if (b.night_start !== undefined && b.night_start === b.night_end) {
+		return c.json({ error: "The night screen's start and end times can't be the same." }, 400);
+	}
+	if (b.night_on !== undefined) await setSetting(c.env, "night_on", b.night_on ? "1" : "0");
+	if (b.night_start !== undefined) await setSetting(c.env, "night_start", b.night_start);
+	if (b.night_end !== undefined) await setSetting(c.env, "night_end", b.night_end);
 	if (b.lookahead_days !== undefined) {
 		await setSetting(c.env, "lookahead_days", String(Math.min(Math.max(Math.round(Number(b.lookahead_days)) || 3, 1), 14)));
 	}

@@ -1,4 +1,5 @@
-/* Mary's kiosk. Designed at 1128x752 (Chromebook 713, 3:2); 1rem = 16 design px and scales to the screen. */
+/* Mary's kiosk. Designed at 1128x752 (3:2, first on a Chromebook 713); 1rem = 16 design px and scales to the screen,
+   so it also fits the Fire HD 10 (16:10) with thin bars. */
 
 @font-face {
 	font-family: "Atkinson Hyperlegible";
@@ -494,4 +495,57 @@ svg.icon {
 .done-page .orient {
 	font-size: 1.625rem;
 	color: var(--ink-soft);
+}
+
+/* ---------- Night ---------- */
+/* Dim, warm and very dark, so it doesn't light the room. Day, time and date stay readable. */
+
+body.night,
+html:has(body.night) {
+	background: #000;
+}
+
+.night-page {
+	background: #000;
+	color: #5c5045;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	gap: 0.5rem;
+	cursor: none;
+}
+
+.night-day {
+	font-size: 3.5rem;
+	font-weight: 700;
+}
+
+.night-clock {
+	font-size: 13rem;
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+}
+
+.night-date {
+	font-size: 2.75rem;
+}
+
+.night-page.awake {
+	color: #a8957f;
+}
+
+.night-msg {
+	font-size: 4rem;
+	font-weight: 700;
+	color: #c9b49a;
+	margin-bottom: 1rem;
+}
+
+.night-msg.small {
+	font-size: 2.25rem;
+	font-weight: 400;
+	margin: 1.5rem 0 0;
 }

@@ -13,6 +13,7 @@ import {
 	dayAndPart,
 	dayLabel,
 	doseWords,
+	isNight,
 	localParts,
 	monthDay,
 	rangeWords,
@@ -21,7 +22,7 @@ import {
 } from "./shared/words.js";
 import { activeReminder, chimeKey, doseState, isClosed, stripStatus } from "./shared/doses.js";
 
-const APP_VERSION = "0.1.1";
+const APP_VERSION = "0.2.0";
 const SEC = 1000;
 const MIN = 60 * SEC;
 const IDLE_MS = 60 * SEC;
@@ -32,6 +33,7 @@ const PHOTOS_LIST_MS = 5 * MIN;
 const HEARTBEAT_MS = 5 * MIN;
 const MAX_TODAY_ROWS = 5;
 const MAX_COMING_CARDS = 4;
+const NIGHT_AWAKE_MS = 15 * SEC; // a tap at night shows the message this long
 
 // ---------- Local storage (never throws) ----------
 
@@ -365,7 +367,7 @@ function live(key, now) {
 }
 
 function backButton() {
-	return h("button", { class: "back", on: { click: () => show("frame") } }, icon("picture"), h("span", {}, "Back to pictures"));
+	return h("button", { class: "back", on: { click: () => show(home()) } }, icon("picture"), h("span", {}, "Back to pictures"));
 }
 
 // ---------- Screens ----------
@@ -373,6 +375,17 @@ function backButton() {
 let current = { name: "", data: null, since: 0 };
 let lastTouch = Date.now();
 const root = document.getElementById("screen");
+
+/** Night hours from the admin page (9 PM to 7 AM unless Gary changed them). */
+function nightNow(now) {
+	const n = state?.night;
+	if (!n?.on) return false;
+	const p = localParts(now, tz());
+	return isNight(p.h, p.mi, n.start, n.end);
+}
+
+/** Where to go when nothing else is up: the pictures by day, the dim night screen at night. */
+const home = (now = Date.now()) => (nightNow(now) ? "night" : "frame");
 
 function show(name, data = null) {
 	current = { name, data, since: Date.now() };
@@ -385,6 +398,43 @@ function render() {
 	const page = SCREENS[current.name](now, current.data);
 	root.replaceChildren(page);
 	if (current.name === "frame") startFrame(now);
+	else clearInterval(frameTimer);
+	document.body.classList.toggle("night", current.name === "night");
+	backlight(current.name === "night");
+}
+
+// Night: a dim screen with the clock, day and date. No photos, no menus. A tap says it's
+// night-time, then it dims again. Reminders still come up over it.
+function nightScreen(now, data) {
+	const awake = Boolean(data?.awake);
+	return h(
+		"div",
+		{ class: `page night-page${awake ? " awake" : ""}`, role: "button", "aria-label": "Night-time", on: { click: () => show("night", { awake: true }) } },
+		awake ? h("div", { class: "night-msg" }, "It's night-time.") : null,
+		h("div", { class: "night-day" }, live("daypart", now)),
+		h("div", { class: "night-clock" }, live("time", now)),
+		h("div", { class: "night-date" }, live("today", now)),
+		awake ? h("div", { class: "night-msg small" }, "Time to rest. The pictures come back in the morning.") : null,
+	);
+}
+
+// Fully Kiosk Browser (on the Fire tablet) can turn the backlight down when its JavaScript
+// Interface is on. In a plain browser this does nothing and the dark screen does the work.
+let dayBrightness = null;
+function backlight(night) {
+	const f = window.fully;
+	if (!f?.setScreenBrightness) return;
+	try {
+		if (night) {
+			if (dayBrightness === null) dayBrightness = Number(f.getScreenBrightness?.()) || 150;
+			f.setScreenBrightness(current.data?.awake ? 40 : 3);
+		} else if (dayBrightness !== null) {
+			f.setScreenBrightness(dayBrightness);
+			dayBrightness = null;
+		}
+	} catch {
+		/* not allowed: leave brightness alone */
+	}
 }
 
 // Frame: rotating photos with captions, the orientation strip, and today's dose status.
@@ -611,7 +661,7 @@ function doneScreen(now, dose) {
 	}
 	return h(
 		"div",
-		{ class: "page done-page", role: "button", "aria-label": "Back to pictures", on: { click: () => show("frame") } },
+		{ class: "page done-page", role: "button", "aria-label": "Back to pictures", on: { click: () => show(home()) } },
 		h("div", { class: "check" }, icon("check")),
 		h("h1", {}, `${capitalize(doseWords(dose.dose))}: done`),
 		h("div", { class: "thanks" }, thanks),
@@ -626,6 +676,7 @@ const SCREENS = {
 	coming: comingScreen,
 	reminder: reminderScreen,
 	done: doneScreen,
+	night: nightScreen,
 };
 
 // ---------- The loop ----------
@@ -685,11 +736,19 @@ function tick() {
 		}
 	} else if (current.name === "reminder") {
 		// Closed elsewhere (Gary marked it) or the window ended.
-		show("frame");
+		show(home(now));
 	}
 
-	if (current.name === "done" && now - current.since > DONE_MS) show("frame");
-	if (["menu", "today", "coming"].includes(current.name) && now - lastTouch > IDLE_MS) show("frame");
+	if (current.name === "done" && now - current.since > DONE_MS) show(home(now));
+	const night = nightNow(now);
+	if (night) {
+		// Night hours: anything but a reminder or its Done screen goes to the night screen.
+		if (["frame", "menu", "today", "coming"].includes(current.name)) show("night");
+		else if (current.name === "night" && current.data?.awake && now - lastTouch > NIGHT_AWAKE_MS) show("night");
+	} else if (current.name === "night") {
+		show("frame"); // morning
+	}
+	if (["menu", "today", "coming"].includes(current.name) && now - lastTouch > IDLE_MS) show(home(now));
 
 	if (current.name === "frame" && proactiveToday(now)) show("today", { auto: true });
 
@@ -720,7 +779,7 @@ function onDataChanged() {
 
 /** Reload once a night at 3 AM to pick up new versions and clear any slow leaks. */
 function maybeReload(p) {
-	if (p.h !== 3 || current.name !== "frame") return;
+	if (p.h !== 3 || (current.name !== "frame" && current.name !== "night")) return;
 	if (store.get("reloaded_on", "") === p.date) return;
 	store.set("reloaded_on", p.date);
 	location.reload();
@@ -773,7 +832,7 @@ window.addEventListener("online", () => {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 
 pruneMemory();
-show("frame");
+show(home());
 keepAwake();
 setInterval(tick, SEC);
 refreshState().then(() => flushPending());

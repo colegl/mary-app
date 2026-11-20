@@ -145,3 +145,19 @@ export function doseWords(dose) {
 export function capitalize(s) {
 	return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/**
+ * True when h:mi is inside the night window: from `start` up to (not including) `end`,
+ * both "HH:MM". The window may cross midnight (21:00 to 07:00). Equal times mean no night.
+ */
+export function isNight(h, mi, start, end) {
+	const m = (t) => {
+		const [a, b] = String(t ?? "").split(":").map(Number);
+		return Number.isFinite(a) && Number.isFinite(b) ? a * 60 + b : null;
+	};
+	const s = m(start);
+	const e = m(end);
+	if (s === null || e === null || s === e) return false;
+	const t = h * 60 + mi;
+	return s < e ? t >= s && t < e : t >= s || t < e;
+}

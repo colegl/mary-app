@@ -277,6 +277,9 @@ function renderSettings() {
 	$("#s-look").value = String(data.settings.lookahead_days >= 7 ? 7 : 3);
 	$("#s-morning").value = data.settings.morning_show;
 	$("#s-pre").value = data.settings.preevent_min;
+	$("#s-night").checked = data.settings.night.on;
+	$("#s-night-start").value = data.settings.night.start;
+	$("#s-night-end").value = data.settings.night.end;
 }
 
 function renderAlerts() {
@@ -380,7 +383,14 @@ $("#test-cancel").addEventListener("click", async () => {
 $("#save-settings").addEventListener("click", async () => {
 	try {
 		await api("/settings", {
-			json: { lookahead_days: Number($("#s-look").value), morning_show: $("#s-morning").value, preevent_min: Number($("#s-pre").value) },
+			json: {
+				lookahead_days: Number($("#s-look").value),
+				morning_show: $("#s-morning").value,
+				preevent_min: Number($("#s-pre").value),
+				night_on: $("#s-night").checked,
+				night_start: $("#s-night-start").value,
+				night_end: $("#s-night-end").value,
+			},
 		});
 		toast("Settings saved");
 	} catch (e) {
