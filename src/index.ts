@@ -2,10 +2,11 @@ import { Hono, type Context, type Next } from "hono";
 import { APP_VERSION, type Env } from "./env";
 import { verifyAccess } from "./access";
 import { checkPassword, clearCookie, hasSession, loginPage, passwordEnabled, sessionCookie } from "./password";
-import { safeEqual } from "./crypto";
+import { encrypt, safeEqual } from "./crypto";
 import { deleteSetting, getSetting, getSettings, intSetting, setSetting } from "./db";
 import { ntfyServer, ntfyTopic, sendAlert } from "./alerts";
-import { googleAuthUrl, googleCallback, syncWithAlerts } from "./calendar";
+import { calendarSource, fetchIcal, googleAuthUrl, googleCallback, syncWindow, syncWithAlerts } from "./calendar";
+import { normalizeIcalUrl, parseMaryEvents } from "./ical";
 import {
 	cancelTestDoses,
 	confirmDose,
@@ -216,7 +217,7 @@ admin.get("/overview", async (c) => {
 		now,
 		timezone: env.TIMEZONE,
 		app_version: APP_VERSION,
-		calendar_source: env.CALENDAR_SOURCE,
+		calendar_source: await calendarSource(env),
 		alert_provider: env.ALERT_PROVIDER,
 		ntfy:
 			env.ALERT_PROVIDER === "pushover"
@@ -227,6 +228,7 @@ admin.get("/overview", async (c) => {
 						return { topic, server, web: `${server}/${encodeURIComponent(topic)}`, app: `ntfy://${new URL(server).host}/${encodeURIComponent(topic)}` };
 					})(),
 		google_connected: Boolean(settings.google_refresh),
+		google_available: Boolean(env.GOOGLE_CLIENT_ID),
 		sync: {
 			last_ok: settings.last_sync_ok ? Number(settings.last_sync_ok) : null,
 			fail_count: intSetting(settings, "sync_fail_count", 0),
@@ -398,10 +400,44 @@ admin.post("/settings", async (c) => {
 
 admin.post("/sync", async (c) => {
 	const now = Date.now();
+	if ((await calendarSource(c.env)) === "none") {
+		return c.json({ ok: false, error: "No calendar connected yet. Paste the calendar's secret address first." });
+	}
 	await setSetting(c.env, "last_sync_attempt", String(now));
 	await syncWithAlerts(c.env, now);
 	const s = await getSettings(c.env);
 	return c.json({ ok: !s.last_sync_error, error: s.last_sync_error ?? null });
+});
+
+// The calendar's "Secret address in iCal format". Checked by downloading it before saving.
+admin.post("/calendar-url", async (c) => {
+	const env = c.env;
+	const body = await c.req.json<{ url?: string }>().catch(() => ({}) as { url?: string });
+	const url = normalizeIcalUrl(body.url ?? "");
+	if (!url) return c.json({ ok: false, error: "That doesn't look like a web address. Copy the whole \"Secret address in iCal format\"." }, 400);
+	if (/calendar\/ical\/.*\/public\//.test(url)) {
+		return c.json({ ok: false, error: "That's the public address, which only works if the calendar is made public. Use the \"Secret address in iCal format\" just below it." }, 400);
+	}
+	const now = Date.now();
+	let found: number;
+	let upcoming: { title: string; start_at: number; all_day: boolean }[];
+	try {
+		const { from, to } = await syncWindow(env, now);
+		const events = parseMaryEvents(await fetchIcal(url), from, to, env.TIMEZONE);
+		found = events.length;
+		upcoming = events.slice(0, 5).map((e) => ({ title: e.title, start_at: e.start_at, all_day: e.all_day }));
+	} catch (e) {
+		return c.json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 400);
+	}
+	await setSetting(env, "ical_url", await encrypt(env.TOKEN_ENCRYPTION_KEY, url));
+	await setSetting(env, "last_sync_attempt", String(now));
+	await syncWithAlerts(env, now);
+	return c.json({ ok: true, found, upcoming });
+});
+
+admin.delete("/calendar-url", async (c) => {
+	await deleteSetting(c.env, "ical_url");
+	return c.json({ ok: true });
 });
 
 admin.post("/google/disconnect", async (c) => {

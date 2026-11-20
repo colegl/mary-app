@@ -67,26 +67,42 @@ function stat(k, v, cls = "") {
 function renderStatus() {
 	const hb = data.heartbeats[0];
 	const offline = !hb || Date.now() - hb.last_seen > 15 * 60000;
-	const syncBad = data.sync.fail_count > 0 || (data.calendar_source === "google" && !data.google_connected);
+	const syncBad = data.sync.fail_count > 0 || data.calendar_source === "none";
 	$("#status-grid").replaceChildren(
 		stat("Kiosk last checked in", hb ? `${ago(hb.last_seen)} (v${hb.app_version || "?"})` : "not set up yet", offline ? "bad" : "good"),
 		stat(
 			"Calendar",
 			data.calendar_source === "mock"
 				? "Mock events (CALENDAR_SOURCE=mock)"
-				: data.google_connected
-					? `Synced ${ago(data.sync.last_ok)}${data.sync.fail_count ? ` · ${data.sync.fail_count} failures: ${data.sync.last_error}` : ""}`
-					: "Not connected",
+				: data.calendar_source === "none"
+					? "Not connected yet (see Calendar below)"
+					: `Synced ${ago(data.sync.last_ok)}${data.sync.fail_count ? ` · ${data.sync.fail_count} failures: ${data.sync.last_error}` : ""}`,
 			syncBad ? "bad" : "good",
 		),
 		stat("Alerts go to", data.alert_provider === "pushover" ? "Pushover" : "ntfy"),
 		stat("Server version", data.app_version),
 	);
-	$("#google-connect").hidden = data.calendar_source === "mock";
-	$("#google-connect").textContent = data.google_connected ? "Reconnect Google Calendar" : "Connect Google Calendar";
+	// Google sign-in is the advanced route, offered only when its keys are set up.
+	$("#google-connect").hidden = !data.google_available || data.calendar_source === "ical" || data.calendar_source === "mock";
+	$("#google-connect").textContent = data.google_connected ? "Reconnect Google sign-in" : "Connect with Google sign-in";
 	$("#google-disconnect").hidden = !data.google_connected;
+	$("#sync-now").hidden = data.calendar_source === "none";
+	renderCalendar();
 	$("#subtitle").textContent = `Mary's time: ${fmtFull(data.now)} (${data.timezone})`;
 	$("#tz").textContent = data.timezone;
+}
+
+let calEditing = false;
+function renderCalendar() {
+	const set = data.calendar_source === "ical";
+	$("#cal-setup").hidden = set && !calEditing;
+	$("#cal-done").hidden = !set || calEditing;
+	if (set) {
+		const next = data.events.filter((e) => !e.hidden).length;
+		$("#cal-summary").textContent = data.sync.fail_count
+			? `Connected, but the last ${data.sync.fail_count} syncs failed: ${data.sync.last_error}`
+			: `Connected. Last synced ${ago(data.sync.last_ok)}. ${next} "(Mary)" event${next === 1 ? "" : "s"} coming up (listed under Events).`;
+	}
 }
 
 function doseStatus(d) {
@@ -305,6 +321,39 @@ $("#sync-now").addEventListener("click", async () => {
 	const r = await api("/sync", { json: {} });
 	toast(r.ok ? "Calendar synced" : `Sync failed: ${r.error}`);
 	load();
+});
+$("#ical-save").addEventListener("click", async () => {
+	const url = $("#ical-url").value.trim();
+	const out = $("#cal-result");
+	out.hidden = false;
+	out.className = "";
+	if (!url) {
+		out.textContent = "The box is empty. Paste the address first.";
+		return;
+	}
+	$("#ical-save").disabled = true;
+	out.textContent = "Checking the address…";
+	try {
+		const r = await api("/calendar-url", { json: { url } });
+		$("#ical-url").value = "";
+		calEditing = false;
+		out.className = "good stat";
+		out.textContent = r.found
+			? `It works. Found ${r.found} "(Mary)" event${r.found === 1 ? "" : "s"} in the next week, starting with: ${r.upcoming.map((e) => `${fmtDay(e.start_at)} ${e.title}`).join("; ")}.`
+			: `It works, and the kiosk is now reading your calendar. There are no "(Mary)" events in the next week yet. Add one in Google Calendar, for example "(Mary) Molly visits", and it will show up here within 15 minutes.`;
+		load();
+	} catch (e) {
+		out.className = "bad stat";
+		out.textContent = `Not saved: ${e.message}`;
+	} finally {
+		$("#ical-save").disabled = false;
+	}
+});
+$("#ical-change").addEventListener("click", () => {
+	calEditing = true;
+	$("#cal-result").hidden = true;
+	renderCalendar();
+	$("#ical-url").focus();
 });
 $("#google-disconnect").addEventListener("click", async () => {
 	if (!confirm("Disconnect Google Calendar? The kiosk keeps the events it has.")) return;

@@ -16,16 +16,17 @@ The spec and the screen mockups are the source of truth for behaviour and look:
 ```
 Chromebook (kiosk PWA)  ──device token──▶  Worker  ──▶ D1 (events, schedule, dose log, heartbeats, alerts)
                                              │  ├──▶ R2 (photos, pillbox photos; private)
-Gary's browser (/admin) ──password──────────▶│  ├──▶ Google Calendar API (read-only, every 15 min)
+Gary's browser (/admin) ──password──────────▶│  ├──▶ Google Calendar secret iCal address (every 15 min)
                                              │  └──▶ ntfy or Pushover ──▶ Gary's Pixel
                                 Cron, every minute: dose watcher, kiosk-offline check, sync
 ```
 
 | Path | What |
 |---|---|
-| `src/index.ts` | Routes (kiosk API, admin API, Google sign-in) and the cron handler |
+| `src/index.ts` | Routes (kiosk API, admin API, optional Google sign-in) and the cron handler |
 | `src/doses.ts` | Dose rows, the watcher (re-remind, alert at the window), confirmations, overrides, test doses |
-| `src/calendar.ts` | Google OAuth, the `(Mary)` event sync, the mock source |
+| `src/calendar.ts` | The `(Mary)` event sync and its sources: iCal address, mock, optional Google OAuth |
+| `src/ical.ts` | Reads the iCal feed: keeps only `(Mary)` events, expands repeats and exceptions in Mary's time zone |
 | `src/alerts.ts` | ntfy / Pushover delivery; every alert is also logged in D1 |
 | `src/password.ts` | Admin sign-in with `ADMIN_PASSWORD` (30-day signed cookie, lockout after 10 wrong tries) |
 | `src/access.ts` | Optional: verifies a Cloudflare Access JWT on admin routes |
@@ -114,32 +115,35 @@ Keep the topic private: anyone who knows it can read the alerts. To use a topic 
 
 Then **Run workflow**.
 
-### 6. Connect Google Calendar (read-only)
+### 6. Connect Google Calendar
 
-In [Google Cloud Console](https://console.cloud.google.com):
+The kiosk reads the calendar through its **secret address**, so there's no Google Cloud project and no sign-in. Do this on a computer, with the admin page open.
 
-1. Create a project. Then go to **APIs & Services → Library → Google Calendar API → Enable**.
-2. Set up the **OAuth consent screen** (Google Auth Platform):
-   - Choose External, add yourself as a test user, and add the scope `.../auth/calendar.readonly`.
-   - Then **Publish app** so it's "In production". In "Testing" mode Google expires the sign-in after 7 days and the sync would stop.
-   - Unverified is fine for your own account. You'll click through a warning once.
-3. Go to **Clients (Credentials) → Create client → Web application**. Set **Authorized redirect URI** to the one from the workflow summary: `https://mary-kiosk.<subdomain>.workers.dev/oauth/google/callback`.
+1. Open [Google Calendar settings](https://calendar.google.com/calendar/r/settings).
+2. On the left, under **Settings for my calendars**, click your calendar (usually your name).
+3. Click **Integrate calendar**. Find **Secret address in iCal format** and click the copy icon at its right end.
+4. In the admin page's **Calendar** box, paste it and click **Save**. The page checks the address and lists the first few `(Mary)` events it found.
 
-Add the client's ID and secret to GitHub as the secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then **Run workflow**. In the admin page, click **Connect Google Calendar** and approve. Events whose title starts with `(Mary)` appear under **Events** within a minute.
+Only events whose title starts with `(Mary)` reach the kiosk. Changes show up within 15 minutes (Google itself can take a few minutes longer to update the feed); **Sync calendar now** fetches at once. The address is stored encrypted. If you ever click **Reset** next to it in Google, paste the new one.
 
-If you'd like to try the screens before connecting Google, set the variable `CALENDAR_SOURCE` to `mock` and run the workflow. That uses `mock/events.json`. Delete the variable afterwards and run it again.
+<details><summary>Advanced: Google sign-in instead</summary>
+
+The older route reads the Calendar API with a read-only OAuth sign-in. It needs a Google Cloud project: enable the Calendar API, publish an External OAuth consent screen with the `calendar.readonly` scope, create a Web client with the redirect URI `https://mary-kiosk.<subdomain>.workers.dev/oauth/google/callback`, and add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as GitHub secrets. A **Connect with Google sign-in** button then appears in the admin page's Status box. A saved iCal address takes priority over it.
+</details>
+
+If you'd like to try the screens before connecting a calendar, set the variable `CALENDAR_SOURCE` to `mock` and run the workflow. That uses `mock/events.json`. Delete the variable afterwards and run it again.
 
 ### Optional settings (repository variables)
 
 | Variable | Default | What it does |
 |---|---|---|
 | `TIMEZONE` | `America/New_York` (in `wrangler.jsonc`) | Mary's time zone. Every dose time and "Tuesday morning" uses it. |
-| `CALENDAR_ID` | `primary` | Use another calendar. Find its ID in Google Calendar → Settings → that calendar → Integrate calendar. |
+| `CALENDAR_ID` | `primary` | Google sign-in route only: use another calendar. (With the iCal address, just paste that calendar's address.) |
 | `CALENDAR_SOURCE` | `google` | `mock` for the sample events |
 | `ALERT_PROVIDER` | `ntfy` | `pushover` to use Pushover |
 | `PUBLIC_URL` | worked out from your subdomain | Set this only if you add a custom domain |
 
-The kiosk key and the key that encrypts the Google sign-in are generated on the first deploy and kept on the Worker. You never need to see them: the admin page's **Kiosk setup** gives you the link for the Chromebook.
+The kiosk key and the key that encrypts the calendar address are generated on the first deploy and kept on the Worker. You never need to see them: the admin page's **Kiosk setup** gives you the link for the Chromebook.
 
 ### 7. Fill in the admin page
 

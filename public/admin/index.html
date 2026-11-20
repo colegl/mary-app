@@ -67,7 +67,7 @@ code { font-size: 13px; word-break: break-all; }
 		<div class="row" style="margin-top:12px">
 			<button id="test-alert">Send a test alert to my phone</button>
 			<button id="sync-now">Sync calendar now</button>
-			<a class="btn" id="google-connect" href="/oauth/google/start">Connect Google Calendar</a>
+			<a class="btn" id="google-connect" href="/oauth/google/start" hidden>Connect with Google sign-in</a>
 			<button id="google-disconnect" hidden>Disconnect Google</button>
 		</div>
 	</section>
@@ -84,6 +84,26 @@ code { font-size: 13px; word-break: break-all; }
 			<p class="row"><code id="ntfy-topic"></code> <button id="ntfy-copy">Copy</button></p>
 			<p class="muted">Keep this name private: anyone who knows it can read the alerts.</p>
 		</details>
+	</section>
+
+	<section id="calendar"><h2>Calendar</h2>
+		<div id="cal-setup">
+			<p class="muted">The kiosk reads your Google Calendar through its private address. Do this on a computer (the setting isn't in the phone app).</p>
+			<ol class="steps">
+				<li>Open <a class="btn" href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a> (it opens in a new tab).</li>
+				<li>On the left, under <b>Settings for my calendars</b>, click your calendar (usually your own name).</li>
+				<li>Click <b>Integrate calendar</b> on the left. Find <b>Secret address in iCal format</b>, click the copy icon at its right end (two overlapping squares). If it asks, click <b>Copy</b>.</li>
+				<li>Come back to this tab, click in the box below, paste (Ctrl+V), and click <b>Save</b>.
+					<div class="row" style="margin-top:6px"><input id="ical-url" class="event-text" placeholder="https://calendar.google.com/calendar/ical/…/private-…/basic.ics" autocomplete="off" spellcheck="false"> <button class="primary" id="ical-save">Save</button></div>
+				</li>
+			</ol>
+		</div>
+		<div id="cal-done" hidden>
+			<p id="cal-summary"></p>
+			<p class="muted">Only events whose title starts with "(Mary)" appear on the kiosk, for example <b>(Mary) Molly visits</b>. New events show up within 15 minutes, or click Sync calendar now.</p>
+			<div class="row"><button id="ical-change">Use a different address</button></div>
+		</div>
+		<p id="cal-result" hidden></p>
 	</section>
 
 	<section><h2>Doses</h2>

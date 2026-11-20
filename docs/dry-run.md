@@ -19,7 +19,7 @@ Use the **Dry run** section of the admin page. A test dose says "Time for your t
 | 7 | **Gary override.** Start a test dose; when it shows, click **Mark done** in the admin page. | The kiosk leaves the reminder within about a minute, and no alert is sent. Repeat with **Skip**. |
 | 8 | **Kiosk offline.** Close the kiosk app (or turn Wi-Fi off) for 20 minutes. | "Mary's kiosk is offline" push at about 15–16 minutes; "back" push within 5 minutes of reopening. |
 | 9 | **Reboot.** Restart the Chromebook and sign in. | The app reopens on its own (from Startup) and Status shows a fresh check-in. Note whether you had to make it full screen by hand. |
-| 10 | **Sync failure** (optional). Admin → Disconnect Google, wait 30 minutes, then reconnect. | A "calendar sync failing" push after the second failed sync, and "recovered" after reconnecting. The kiosk kept showing the events it had. |
+| 10 | **Sync failure** (optional). In Google Calendar settings, click **Reset** next to the secret address. Wait 30 minutes, then paste the new address in the admin page's Calendar box. | A "calendar sync failing" push after the second failed sync, and "recovered" after reconnecting. The kiosk kept showing the events it had. |
 
 ## Day 2: a real dose, with you there (about 20 minutes)
 
